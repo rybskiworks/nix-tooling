@@ -1,0 +1,34 @@
+# tombi configuration for nix-tooling.
+# Reuses workestrate's formatting/lint rules but scoped to this repo's file set.
+
+toml-version = "v1.0.0"
+
+[files]
+include = [
+  "*.toml",
+  "**/*.toml",
+  "tombi.toml",
+]
+exclude = [
+  ".devenv/**",
+  ".direnv/**",
+  "target/**",
+  "result/**",
+  "result-*",
+  ".git/**",
+]
+
+[format.rules]
+indent-width = 2
+line-width = 100
+
+[lint.rules]
+dotted-keys-out-of-order = "warn"
+tables-out-of-order = "warn"
+
+[schema]
+enabled = true
+strict = true
+
+[schema.catalog]
+paths = []

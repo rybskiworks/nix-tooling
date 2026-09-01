@@ -1,0 +1,24 @@
+# Nix
+result
+result-*
+/.direnv
+/.devenv
+/.devenv.flake.nix
+/.pre-commit-config.yaml
+
+# Rust (if any local cargo)
+target/
+**/target/
+
+# Devenv
+.devenv/
+.devenv.state/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS
+.DS_Store

@@ -1,0 +1,124 @@
+# nix-tooling
+
+Shared Nix dev tooling for the `rybskiworks` flakes: formatter, git-hooks, Tombi, and Rust via fenix.
+
+This flake is designed as a **sibling** to `workestrate` (`path:../nix-tooling` locally, `github:rybskiworks/nix-tooling` when published) and exposes reusable `devenvModules` so consumers can opt-in without pulling in unwanted tooling.
+
+## Architecture
+
+```
+nix-tooling/
+├── flake.nix                 # flake-parts + devenv + treefmt-nix + git-hooks + fenix
+├── packages/tombi.nix        # pinned Tombi v1.2.5 (sha256-BThb30fRCC…)
+├── devenvModules/
+│   ├── base.nix              # treefmt + typos + shell fundamentals
+│   ├── nix.nix               # nixfmt + statix (+ deadnix)
+│   ├── toml.nix              # Tombi handling (custom formatter + lint hook)
+│   └── rust.nix              # fenix stable toolchain + rustfmt/clippy
+├── tombi.toml
+└── README.md
+```
+
+### Inputs and version pins
+
+| Input | Rev | Follows | Notes |
+|-------|-----|---------|-------|
+| `nixpkgs` | `a799d3e3886da994fa307f817a6bc705ae538eeb` (nixos-unstable) | — | Shared with workestrate for store-path deduplication (consumer sets `tooling.inputs.nixpkgs.follows = "nixpkgs"`). |
+| `flake-parts` | `9d0d87172c374f89da73c1cfe6d81ae62feac1f1` | `nixpkgs` | |
+| `devenv` | `97135e80b6e432f41f84f72383e1b8147f33ef0c` | `nixpkgs`, `git-hooks`, `flake-parts` | |
+| `treefmt-nix` | `27b3b12a8e6375f28ebe122f07d230ca5459bbfa` | `nixpkgs` | No `programs.tombi` (128 programs checked). |
+| `git-hooks.nix` | `27555e2624241fb116b49095df4caaee85a25691` | `nixpkgs` | No `hooks.tombi`; `hooks.treefmt.settings.fail-on-change` defaults `true`. |
+| `fenix` | `fa09e6473a0dfd673e6cb9a37741aec513b4bb2a` (rustc 1.97.1) | `nixpkgs` (tooling) | **Owned pin** — consumer must NOT `follows`-override `tooling.inputs.fenix` so the toolchain stays reproducible. |
+
+*Follows discipline*: share the consumer's `nixpkgs`, but don't override versions nix-tooling explicitly owns (curated pins like Tombi 1.2.5 and fenix). See `flake.nix` comments for decision log.
+
+> `fenix`'s own `nixpkgs` is set to follow `nixpkgs` inside `nix-tooling` so its dependencies are built against the same nixpkgs, but `workestrate` does **not** set `tooling.inputs.fenix.follows = "nixpkgs"` — that would not override the fenix *rev* but would still couple toolchain closure to the consumer's nixpkgs bump; we document that as an owned pin.
+
+### Tombi handling (why custom)
+
+`treefmt-nix` and `git-hooks.nix` have no native Tombi support. We vendor a custom formatter:
+
+```nix
+treefmt.config.settings.formatter.tombi = {
+  command = "${tombi}/bin/tombi";
+  options = ["format"];
+  includes = ["*.toml"];
+};
+```
+
+and a custom git hook:
+
+```nix
+git-hooks.hooks.tombi-lint = {
+  enable = true;
+  entry = "${tombi}/bin/tombi lint --error-on-warnings";
+  files = "\\.toml$";
+  pass_filenames = false;
+};
+```
+
+Formatting is driven by `treefmt` (so `nix fmt` formats `*.toml` via `tombi format` alongside `*.nix`/`*.rs`). Lint is a separate hook.
+
+**Auto-fix on commit**: `git-hooks.hooks.treefmt.settings.fail-on-change`:
+
+- `false` → `git commit` auto-formats staged files (including `*.toml` via Tombi) and succeeds. This is the `devenvModules/toml.nix` default (developer-friendly).
+- `true` (default for `git-hooks.nix`) → commit fails when formatting is needed; run `nix fmt` manually. This is the `perSystem.pre-commit` (CI) setting in `nix-tooling`'s own `nix flake check`.
+
+Override per repo:
+
+```nix
+git-hooks.hooks.treefmt.settings.fail-on-change = lib.mkForce true;  # CI fail-closed
+```
+
+## Usage
+
+Add as a flake input:
+
+```nix
+{
+  inputs.tooling.url = "path:../nix-tooling"; # locally
+  # inputs.tooling.url = "github:rybskiworks/nix-tooling"; # after publish
+  inputs.tooling.inputs.nixpkgs.follows = "nixpkgs";
+  # DO NOT: inputs.tooling.inputs.fenix.follows = "nixpkgs"; # own pin
+}
+```
+
+Consume in a flake-parts + devenv flake:
+
+```nix
+outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } {
+  imports = [ inputs.devenv.flakeModule ];
+  systems = [ "x86_64-linux" ];
+  perSystem = { config, pkgs, ... }: {
+    devenv.shells.default.imports = [
+      inputs.tooling.devenvModules.base
+      inputs.tooling.devenvModules.nix
+      inputs.tooling.devenvModules.toml
+      inputs.tooling.devenvModules.rust
+    ];
+    formatter = config.treefmt.build.wrapper;
+    checks = {
+      inherit (config.pre-commit) checks;
+      # plus your own checks
+    };
+  };
+}
+```
+
+Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` — see `flake.nix` `perSystem.devenv.shells.default`.
+
+## Checks
+
+- `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
+- `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`
+- `nix develop` → devenv shell with all tooling
+
+## Development
+
+```sh
+export PATH="/nix/store/q6yfdws28aj556jlz5yayaggiddmb0b5-nix-2.35.1/bin:$PATH"
+nix flake lock
+nix flake check
+nix fmt
+nix develop --impure -c tombi --version
+```
