@@ -67,9 +67,9 @@ in
   ];
 
   git-hooks.hooks = {
-    rustfmt.enable = lib.mkDefault true;
+    rustfmt.enable = lib.mkDefault false;
     clippy = {
-      enable = lib.mkDefault true;
+      enable = lib.mkDefault false;
       # clippy hook defaults to `cargo clippy --all-targets -- -D warnings` but we keep default.
       settings.denyWarnings = lib.mkDefault true;
     };

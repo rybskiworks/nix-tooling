@@ -149,9 +149,9 @@
                 pass_filenames = false;
               };
 
-              # Rust hooks for flake checks (use fenix packages via overlay).
-              rustfmt.enable = true;
-              clippy.enable = true;
+              # Rust hooks for flake checks — opt-in (mkDefault false in rust.nix); disabled here as nix-tooling has no .rs files.
+              rustfmt.enable = false;
+              clippy.enable = false;
             };
           };
 

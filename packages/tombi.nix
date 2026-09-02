@@ -28,9 +28,9 @@ top="$(git rev-parse --show-toplevel 2>/dev/null || echo "/")"
 if [ -z "$top" ]; then
   top="/"
 fi
-current_dir="$PWD"
+current_dir="$(pwd -P)"
 while true; do
-  if [ -f "$current_dir/tombi.toml" ] || [ -f "$current_dir/.tombi.toml" ] || [ -f "$current_dir/tombi/config.toml" ] || { [ -f "$current_dir/pyproject.toml" ] && grep -q "\[tool\.tombi\]" "$current_dir/pyproject.toml" 2>/dev/null; }; then
+  if [ -f "$current_dir/tombi.toml" ] || [ -f "$current_dir/.tombi.toml" ] || [ -f "$current_dir/tombi/config.toml" ] || { [ -f "$current_dir/pyproject.toml" ] && grep -q '^\[tool\.tombi\]' "$current_dir/pyproject.toml" 2>/dev/null; }; then
     exec "__WRAPPED__" "$@"
   fi
   if [ "$current_dir" = "$top" ] || [ "$current_dir" = "/" ]; then

@@ -14,7 +14,7 @@ nix-tooling/
 │   ├── base.nix              # treefmt + typos + shell fundamentals
 │   ├── nix.nix               # nixfmt + statix (+ deadnix)
 │   ├── toml.nix              # Tombi handling (custom formatter + lint hook)
-│   └── rust.nix              # fenix stable toolchain + rustfmt/clippy
+│   └── rust.nix              # fenix stable toolchain + rustfmt/clippy (hooks opt-in, mkDefault false)
 ├── tombi.toml
 └── README.md
 ```
@@ -119,6 +119,8 @@ outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs;
 ```
 
 Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` — see `flake.nix` `perSystem.devenv.shells.default`.
+
+> `rust.nix` hooks are **opt-in** (`git-hooks.hooks.rustfmt/clippy` default `false` via `lib.mkDefault`); consumers that want pre-commit rustfmt/clippy must enable them explicitly (e.g. `git-hooks.hooks.rustfmt.enable = true; git-hooks.hooks.clippy.enable = true;`). `treefmt.config.programs.rustfmt` remains enabled (formatter).
 
 ## Checks
 
