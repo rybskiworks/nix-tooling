@@ -70,6 +70,19 @@ Override per repo:
 git-hooks.hooks.treefmt.settings.fail-on-change = lib.mkForce true;  # CI fail-closed
 ```
 
+### Canonical rules, drift gate, and PATH-safe wrapper
+
+- **Canonical source**: `share/tombi-format.toml` owns the single source of truth for `toml-version` + `[format.rules]` (`indent-width = 2`, `line-width = 100`) and `[lint.rules]` (`dotted-keys-out-of-order = "warn"`, `tables-out-of-order = "warn"`). Header: `canonical format/lint rules — vendored into per-repo tombi.toml; drift checked by scripts/check-tombi-sync.sh`.
+- **Per-repo `tombi.toml`**: vendored copy of the canonical block plus per-repo `[files]` `include`/`exclude` and `[[schemas]]`/`[schema]` scoping. Do not edit the vendored block directly — edit `share/tombi-format.toml` and re-vendor.
+- **Drift gate**: `scripts/check-tombi-sync.sh` extracts and compares normalized `toml-version` + `[format.rules]` + `[lint.rules]` (sorted, whitespace-normalized, ignoring section order and `[files]`/`[[schemas]]`) against `share/tombi-format.toml`. Fails with `diff -u` on drift.
+  ```sh
+  ./scripts/check-tombi-sync.sh ./tombi.toml
+  ./scripts/check-tombi-sync.sh ./tombi.toml ../workestrate/tombi.toml
+  # from workestrate repo root:
+  # ../nix-tooling/scripts/check-tombi-sync.sh ./tombi.toml
+  ```
+- **PATH-safe wrapper**: `packages/tombi.nix` installs the real binary as `$out/bin/.tombi-wrapped` and a wrapper at `$out/bin/tombi` that walks up from `$PWD` to `git rev-parse --show-toplevel` (fallback `/`) looking for `tombi.toml`, `.tombi.toml`, `tombi/config.toml`, or `pyproject.toml` containing `[tool.tombi]`. If found, `exec`s the wrapped binary with `TOMBI_OFFLINE="${TOMBI_OFFLINE:-true}"`; if not, exits 1 with `tombi: no tombi.toml in scope (walked up to <root>) — use 'nix fmt'/'treefmt' or add tombi.toml; this repo may use its own formatter (e.g. taplo)`.
+
 ## Usage
 
 Add as a flake input:

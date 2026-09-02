@@ -1,0 +1,10 @@
+# canonical format/lint rules — vendored into per-repo tombi.toml; drift checked by scripts/check-tombi-sync.sh
+toml-version = "v1.0.0"
+
+[format.rules]
+indent-width = 2
+line-width = 100
+
+[lint.rules]
+dotted-keys-out-of-order = "warn"
+tables-out-of-order = "warn"
