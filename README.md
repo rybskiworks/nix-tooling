@@ -128,6 +128,21 @@ Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` �
 - `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`
 - `nix develop` → devenv shell with all tooling
 
+## Git hooks
+
+In-shell enforcement comes from the `devenvModules` (`git-hooks.hooks.*` install
+on shell entry with the pinned toolchain). For commits outside a devshell
+(bare host, container without nix, agents that never load `.envrc`),
+`.git/hooks/pre-commit` is a pure-sh fallback (canonical copy:
+`scripts/git-hooks/pre-commit.sh`; reinstall with
+`cp scripts/git-hooks/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`):
+secret-material greps always run, tombi gates skip with a message when `tombi`
+is absent or version-mismatched, and `prek` delegation happens only when both
+the binary and a repo-root `.pre-commit-config.yaml` exist. Plain `git commit`
+never needs `--no-verify`. The generated `.pre-commit-config.yaml` is
+gitignored and never committed (a copy referencing `/nix/store` paths dangles
+after GC).
+
 ## Development
 
 ```sh
