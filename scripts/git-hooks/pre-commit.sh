@@ -27,13 +27,15 @@
 
 label="$(basename "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null)"
 [ -n "$label" ] || label="repo"
-TOMBI_REQUIRED="1.2.5"
 fail=0
 
 # git runs hooks with cwd at the repo top level; anchor there anyway so manual
 # runs from a subdirectory behave the same. Stderr is suppressed: outside a
 # repo (or with a restricted git) the guards see an empty index and pass.
 cd "$(git rev-parse --show-toplevel 2>/dev/null)" 2>/dev/null || true
+
+# canonical tombi version: share/tombi-version (single source; packages/tombi.nix reads the same file)
+TOMBI_REQUIRED="$(tr -d '[:space:]' < share/tombi-version 2>/dev/null || true)"
 
 # --- (1) secret-material guard (staged paths only) ---------------------------
 staged=$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null)

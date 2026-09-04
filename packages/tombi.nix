@@ -2,7 +2,7 @@
 
 pkgs.stdenv.mkDerivation rec {
   pname = "tombi";
-  version = "1.2.5";
+  version = pkgs.lib.strings.trim (builtins.readFile ../share/tombi-version);
 
   src = pkgs.fetchurl {
     url = "https://github.com/tombi-toml/tombi/releases/download/v${version}/tombi-cli-${version}-x86_64-unknown-linux-musl.tar.gz";

@@ -9,7 +9,7 @@ This flake is designed as a **sibling** to `workestrate` (`path:../nix-tooling` 
 ```
 nix-tooling/
 ├── flake.nix                 # flake-parts + devenv + treefmt-nix + git-hooks + fenix
-├── packages/tombi.nix        # pinned Tombi v1.2.5 (sha256-BThb30fRCC…)
+├── packages/tombi.nix        # pinned Tombi (version: share/tombi-version; sha in packages/tombi.nix)
 ├── devenvModules/
 │   ├── base.nix              # treefmt + typos + shell fundamentals
 │   ├── nix.nix               # nixfmt + statix (+ deadnix)
@@ -30,7 +30,7 @@ nix-tooling/
 | `git-hooks.nix` | `27555e2624241fb116b49095df4caaee85a25691` | `nixpkgs` | No `hooks.tombi`; `hooks.treefmt.settings.fail-on-change` defaults `true`. |
 | `fenix` | `fa09e6473a0dfd673e6cb9a37741aec513b4bb2a` (rustc 1.97.1) | `nixpkgs` (tooling) | **Owned pin** — consumer must NOT `follows`-override `tooling.inputs.fenix` so the toolchain stays reproducible. |
 
-*Follows discipline*: share the consumer's `nixpkgs`, but don't override versions nix-tooling explicitly owns (curated pins like Tombi 1.2.5 and fenix). See `flake.nix` comments for decision log.
+*Follows discipline*: share the consumer's `nixpkgs`, but don't override versions nix-tooling explicitly owns (curated pins like Tombi (share/tombi-version) and fenix). See `flake.nix` comments for decision log.
 
 > `fenix`'s own `nixpkgs` is set to follow `nixpkgs` inside `nix-tooling` so its dependencies are built against the same nixpkgs, but `workestrate` does **not** set `tooling.inputs.fenix.follows = "nixpkgs"` — that would not override the fenix *rev* but would still couple toolchain closure to the consumer's nixpkgs bump; we document that as an owned pin.
 
@@ -125,7 +125,7 @@ Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` �
 ## Checks
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
-- `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`
+- `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`, `checks.tombi-sync` (tombi-sync fails on drift between the vendored `tombi.toml` and canonical `share/tombi-format.toml`)
 - `nix develop` → devenv shell with all tooling
 
 ## Git hooks
@@ -146,7 +146,7 @@ after GC).
 ## Development
 
 ```sh
-export PATH="/nix/store/q6yfdws28aj556jlz5yayaggiddmb0b5-nix-2.35.1/bin:$PATH"
+export PATH="/nix/store/<hash>-nix-<version>/bin:$PATH" # only needed when nix is not already on PATH
 nix flake lock
 nix flake check
 nix fmt

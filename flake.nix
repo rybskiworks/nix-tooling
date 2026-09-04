@@ -18,12 +18,8 @@
       };
     };
 
-    nix2container = {
-      url = "github:nlewo/nix2container";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    mk-shell-bin.url = "github:rrbutani/nix-mk-shell-bin";
+    # Removed unused container/shell-bin helper inputs (no consumers anywhere in the repo);
+    # run `nix flake lock` on a nix host to prune their stale lock entries.
 
     treefmt-nix = {
       url = "github:numtide/treefmt-nix/27b3b12a8e6375f28ebe122f07d230ca5459bbfa";
@@ -74,12 +70,10 @@
         inputs.git-hooks.flakeModule
       ];
 
-      systems = [
-        "x86_64-linux"
-        "aarch64-linux"
-        "aarch64-darwin"
-        "x86_64-darwin"
-      ];
+      # tombiPkg is a pinned x86_64-linux-musl binary tarball (packages/tombi.nix meta.platforms)
+      # consumed by every perSystem output, so other systems cannot evaluate/build;
+      # widen only when per-system tombi artifacts are added.
+      systems = [ "x86_64-linux" ];
 
       # Expose devenv modules as reusable flakes outputs.
       # Consumers: `devenv.shells.default.imports = [ inputs.tooling.devenvModules.base ... ]`
@@ -181,6 +175,26 @@
                   export TOMBI_OFFLINE=true
                   tombi format --check
                   tombi lint --error-on-warnings
+                  touch $out/ok
+                '';
+
+            # Manual drift gate wired into `nix flake check`; compares vendored tombi.toml
+            # rules against canonical share/tombi-format.toml.
+            tombi-sync =
+              pkgsWithFenix.runCommand "tombi-sync-check"
+                {
+                  nativeBuildInputs = with pkgsWithFenix; [
+                    bash
+                    gawk
+                    gnused
+                    diffutils
+                    coreutils
+                  ];
+                }
+                ''
+                  cd ${./.}
+                  bash scripts/check-tombi-sync.sh tombi.toml
+                  mkdir -p $out
                   touch $out/ok
                 '';
           };

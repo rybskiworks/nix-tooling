@@ -5,7 +5,7 @@
 # - git-hooks.nix latest (27555e...) has NO hooks.tombi, but has hooks.treefmt with `settings.fail-on-change` default true.
 #
 # Design:
-# - Provide a pinned Tombi package (v1.2.5, same as workestrate/nix/packages/tombi.nix) via `pkgs.callPackage ../packages/tombi.nix`.
+# - Provide a pinned Tombi package (version single-sourced in ../share/tombi-version, same pin as workestrate) via `pkgs.callPackage ../packages/tombi.nix`.
 # - Register a custom treefmt formatter `tombi`:
 #     treefmt.config.settings.formatter.tombi = {
 #       command = "${tombi}/bin/tombi";
