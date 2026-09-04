@@ -126,7 +126,7 @@ Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` �
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
 - `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`, `checks.tombi-sync` (tombi-sync fails on drift between the vendored `tombi.toml` and canonical `share/tombi-format.toml`)
-- `nix develop` → devenv shell with all tooling
+- `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
 
 ## Git hooks
 
@@ -155,5 +155,5 @@ export PATH="/nix/store/<hash>-nix-<version>/bin:$PATH" # only needed when nix i
 nix flake lock
 nix flake check
 nix fmt
-nix develop --impure -c tombi --version
+./scripts/devenv-shell.sh -c tombi --version
 ```

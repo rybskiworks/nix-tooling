@@ -41,10 +41,16 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Placeholder for pure evaluation: devenv requires a non-empty `devenv.root`
-    # even when `builtins.getEnv "PWD"` is empty (pure `nix flake show/check`).
-    # See https://devenv.sh/guides/using-with-flakes/ — consumers can override via
-    # `nix develop --override-input devenv-root "file+file://$PWD"` when needed.
+    # Placeholder for pure evaluation: devenv's auto-imported readDevenvRoot
+    # module sets devenv.root from builtins.readFile of this input when the
+    # content is non-empty; /dev/null reads as "" (override inert, keeps
+    # `nix flake show/check`-style eval of OTHER outputs working). Consumers
+    # enter the shell via
+    #   nix develop --override-input devenv-root "file+file://<rootfile>"
+    # where <rootfile> is a FILE containing the worktree abs path (NOT the
+    # directory — builtins.readFile requires a regular file; the older
+    # "file+file://$PWD" form in docs was wrong). See scripts/devenv-shell.sh.
+    # https://devenv.sh/guides/using-with-flakes/
     devenv-root = {
       url = "file+file:///dev/null";
       flake = false;
@@ -212,18 +218,19 @@
 
           # Dogfooding devShell: uses its own devenvModules.
           devenv.shells.default = {
-            # Pure-evaluation fallback for `devenv.root`: when `nix flake show/check`
-            # runs pure, `builtins.getEnv "PWD"` is empty and devenv's flake-compat
-            # assertion `config.devenv.root != ""` would fail. We provide a pure
-            # fallback to the flake's store path; when running `nix develop --impure`
-            # (or via direnv with `--override-input devenv-root`), PWD will be non-empty
-            # and the flake-compat default will take precedence via `lib.mkDefault`.
-            # We use a conditional so the store path only wins when PWD is empty.
-            devenv.root =
-              let
-                pwd = builtins.getEnv "PWD";
-              in
-              if pwd != "" then pwd else toString ./.; # pure fallback
+            # devenv.root is intentionally NOT set here: the auto-imported
+            # readDevenvRoot module (inputs.devenv.flakeModule) sets it from
+            # the `devenv-root` input placeholder (see inputs above;
+            # --override-input never touches flake.lock). Entry points pass
+            #   --override-input devenv-root "file+file://<rootfile>"
+            # where <rootfile> holds the worktree abs path —
+            # scripts/devenv-shell.sh writes
+            # $HOME/.cache/workestrate/devenv-root/nix-tooling. Impure eval
+            # falls back to devenv's mkDefault (getEnv PWD); pure eval WITHOUT
+            # the override fails devenv's `devenv.root != ""` assertion by
+            # design — the old store-path fallback put dotfile/state into a
+            # read-only /nix/store copy. Dotfile/state keep devenv defaults:
+            # dotfile = <root>/.devenv (gitignored in-tree), state follows.
 
             imports = [
               ./devenvModules/base.nix
