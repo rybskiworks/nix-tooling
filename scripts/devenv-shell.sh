@@ -15,11 +15,12 @@
 #   ./scripts/devenv-shell.sh -c <cmd>     # one-shot command in the shell
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+_repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$_repo_root"
 
 _devenv_root_dir="$HOME/.cache/workestrate/devenv-root"
 mkdir -p "$_devenv_root_dir"
-_devenv_root_file="$_devenv_root_dir/nix-tooling"
-printf '%s' "$PWD" > "$_devenv_root_file"
+_devenv_root_file="$_devenv_root_dir/$(printf '%s' "$_repo_root" | sha256sum | cut -c1-12)"
+printf '%s' "$_repo_root" > "$_devenv_root_file"
 
 exec nix develop --override-input devenv-root "file+file://$_devenv_root_file" "$@"
