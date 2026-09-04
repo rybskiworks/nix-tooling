@@ -4,6 +4,7 @@
 # - core packages (git, jq)
 # - typos spell-check via git-hooks
 # - treefmt integration baseline (enabled, projectRootFile handling)
+# - git-hooks installer disabled by default (shell entry no longer mutates .git/hooks)
 #
 # This is a devenv module: `function { pkgs, lib, config, ... }: { ... }`
 # It is imported via `devenv.shells.default.imports = [ inputs.tooling.devenvModules.base ]`
@@ -21,6 +22,27 @@
     git
     jq
   ];
+
+  # Disable git-hooks.nix's installer so entering a devenv shell no longer
+  # mutates `.git/hooks`.
+  #
+  # Previously, entering any devenv shell that imports these modules ran
+  # git-hooks.nix's installer, which MOVED the tracked pure-sh fallback
+  # (`.git/hooks/pre-commit.sh`) to `.git/hooks/pre-commit.legacy` and wrote a
+  # store-path'd generated hook in its place. That generated hook dangles after
+  # nix GC and drops the secret-material gate the pure-sh fallback enforces —
+  # so commits outside a live devshell would either hard-fail or silently lose
+  # the secret guard.
+  #
+  # Setting `install.enable = false` stops the `.git/hooks` mutation while
+  # keeping the hook definitions fully evaluated and usable: they remain
+  # available to `nix flake check` (via the separate perSystem `pre-commit`
+  # namespace in flake.nix, which is unaffected by this devenv-side knob) and
+  # to devenv's task system.
+  #
+  # `mkDefault` so a consumer that genuinely wants installer-managed hooks may
+  # deliberately re-enable via `git-hooks.install.enable = lib.mkForce true;`.
+  git-hooks.install.enable = lib.mkDefault false;
 
   # Typos spell-checker: shared baseline. Consumers can override
   # `git-hooks.hooks.typos.settings.*` or disable via `git-hooks.hooks.typos.enable = false`.
