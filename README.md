@@ -143,6 +143,11 @@ never needs `--no-verify`. The generated `.pre-commit-config.yaml` is
 gitignored and never committed (a copy referencing `/nix/store` paths dangles
 after GC).
 
+Canonical note: see workestrate `docs/nix/store-hygiene-and-gc.md`
+§"Git hooks vs GC" — entering the devenv shell moves this shim to
+`pre-commit.legacy` and installs the generated hook; re-run the `cp` above
+afterwards.
+
 ## Development
 
 ```sh
