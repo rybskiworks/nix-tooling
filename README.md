@@ -133,20 +133,27 @@ Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` �
 In-shell enforcement comes from the `devenvModules` (`git-hooks.hooks.*` install
 on shell entry with the pinned toolchain). For commits outside a devshell
 (bare host, container without nix, agents that never load `.envrc`),
-`.git/hooks/pre-commit` is a pure-sh fallback (canonical copy:
-`scripts/git-hooks/pre-commit.sh`; reinstall with
-`cp scripts/git-hooks/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`):
-secret-material greps always run, tombi gates skip with a message when `tombi`
-is absent or version-mismatched, and `prek` delegation happens only when both
-the binary and a repo-root `.pre-commit-config.yaml` exist. Plain `git commit`
+`.git/hooks/pre-commit` and `.git/hooks/pre-push` are pure-sh fallbacks
+(canonical copies: `scripts/git-hooks/pre-commit.sh` and
+`scripts/git-hooks/pre-push.sh`; reinstall with
+`cp scripts/git-hooks/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
+and `cp scripts/git-hooks/pre-push.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push`):
+secret-material greps always run, tier-1 linters (typos/nixfmt/statix/deadnix)
+and tombi gates skip with a message when the tool is absent or
+version-mismatched, staged `.rs` files get `rustfmt --check` at the crate's
+edition when rustfmt is on PATH, pre-push runs `just check` when
+just+nix+check-recipe are present (skip-with-message otherwise), and `prek`
+delegation happens only when both the binary and a repo-root
+`.pre-commit-config.yaml` exist. Plain `git commit`
 never needs `--no-verify`. The generated `.pre-commit-config.yaml` is
 gitignored and never committed (a copy referencing `/nix/store` paths dangles
 after GC).
 
 Canonical note: see workestrate `docs/nix/store-hygiene-and-gc.md`
-§"Git hooks vs GC" — entering the devenv shell moves this shim to
-`pre-commit.legacy` and installs the generated hook; re-run the `cp` above
-afterwards.
+§"Git hooks vs GC" — the devenv-shell clobber of these shims is disabled by
+default (`git-hooks.install.enable = lib.mkDefault false` in
+`devenvModules/base.nix`); if a consumer re-enables installation, re-run the
+`cp` commands above after shell entry.
 
 ## Development
 

@@ -62,7 +62,15 @@ in
   ];
 
   treefmt.config.programs.rustfmt = lib.mkMerge [
-    { enable = lib.mkDefault true; }
+    {
+      enable = lib.mkDefault true;
+      # treefmt-nix's rustfmt default is edition 2024, which treats `gen` as
+      # reserved and breaks pre-2024 crates (e.g. workestrate's
+      # control/agentctl, which pins edition = "2021" in its Cargo.toml and
+      # re-pins 2021 in its own treefmt.config). mkDefault so consumers on
+      # newer editions can override.
+      edition = lib.mkDefault "2021";
+    }
     (lib.mkIf (rustfmtPkg != null) { package = lib.mkDefault rustfmtPkg; })
   ];
 
