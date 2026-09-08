@@ -18,9 +18,6 @@
       };
     };
 
-    # Removed unused container/shell-bin helper inputs (no consumers anywhere in the repo);
-    # run `nix flake lock` on a nix host to prune their stale lock entries.
-
     treefmt-nix = {
       url = "github:numtide/treefmt-nix/27b3b12a8e6375f28ebe122f07d230ca5459bbfa";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -112,7 +109,11 @@
             programs = {
               nixfmt.enable = true;
               statix.enable = true;
-              rustfmt.enable = true;
+              rustfmt = {
+                enable = true;
+                package = pkgsWithFenix.fenix.stable.rustfmt;
+                edition = "2024";
+              };
             };
             settings.formatter.tombi = {
               command = "${tombiPkg}/bin/tombi";
