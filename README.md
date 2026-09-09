@@ -182,7 +182,7 @@ The [pinned devenv cache configuration](https://github.com/cachix/devenv/blob/97
 ## Checks
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
-- The [full check recipe](#development) validates all outputs and runs the nine ordinary checks: formatting, hooks, Tombi, Beads, both guest contracts, and the pure SQL-service contract. Tombi sync rejects drift from `share/tombi-format.toml`.
+- The [full check recipe](#development) validates all outputs and runs the ten ordinary checks: formatting, hooks, Tombi, Beads, the guest contracts, and the pure SQL-service contract. Tombi sync rejects drift from `share/tombi-format.toml`.
 - `nix build .#checks.x86_64-linux.beads-version` → verifies the pinned CLI version and help without creating a tracker
 - `nix build .#checks.x86_64-linux.beads-embedded` → creates, exports, and queries one issue in disposable embedded storage without installing hooks or repository instructions
 - `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
@@ -193,6 +193,11 @@ unused automatic shell/process container outputs are disabled; shared modules
 retain consumers' container capability. Disabling those outputs does not remove
 the development shell's explicit-root requirement. Checking does not enter the
 shell or run its hooks, and the optional NixOS VM test is not an ordinary check.
+
+The experimental [NixOS OCI image interface](docs/nixos-oci-images.md) exports
+one Determinate base and additive registered leaves. Its ordinary contract
+check does not build images; actual Microsandbox activation and shutdown remain
+separate required gates.
 
 ## Git hooks
 

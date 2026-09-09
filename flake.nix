@@ -98,9 +98,12 @@
           beads = import ./devenvModules/beads.nix inputs.beads;
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
-        nixosModules.guestBase = ./nixosModules/guest-base.nix;
-        nixosModules.determinateGuest = import ./nixosModules/determinate-guest.nix {
-          inherit (inputs) determinate nixpkgs;
+        nixosModules = {
+          guestBase = ./nixosModules/guest-base.nix;
+          microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
+          determinateGuest = import ./nixosModules/determinate-guest.nix {
+            inherit (inputs) determinate nixpkgs;
+          };
         };
       };
 
@@ -128,6 +131,23 @@
           determinateChecks = import ./tests/determinate {
             pkgs = pkgsWithFenix;
             inherit (inputs) determinate nixpkgs;
+          };
+          guestLib = import ./lib/guest { inherit (inputs) nixpkgs; };
+          commonGuestBase = guestLib.mkNixosImage {
+            pkgs = pkgsWithFenix;
+            name = "determinate-nixos-guest";
+            tag = "26.11";
+            stateVersion = "26.05";
+            # Leave space for each direct leaf's payload and customization.
+            maxLayers = 64;
+            modules = [
+              (import ./nixosModules/determinate-guest.nix { inherit (inputs) determinate nixpkgs; })
+            ];
+          };
+          nixosImages = import ./tests/nixos-image {
+            pkgs = pkgsWithFenix;
+            guest = guestLib;
+            base = commonGuestBase;
           };
         in
         {
@@ -195,6 +215,7 @@
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
             beads-server-contract = beadsServerChecks.contract;
+            nixos-image-contract = nixosImages.contract;
 
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"
@@ -305,12 +326,16 @@
             guest-minimal = guestChecks.image;
             determinate-nix = inputs.determinate.inputs.nix.packages.${system}.default;
             determinate-nixd = inputs.determinate.packages.${system}.default;
+            guest-determinate-base = commonGuestBase;
           };
 
           # Image realization stays explicit; ordinary tooling checks are small.
           legacyPackages = {
             guestChecks = {
               inherit (guestChecks) archive closure;
+            };
+            nixosImages = {
+              inherit (nixosImages) base leaf;
             };
             # The VM is opt-in and never part of an ordinary tooling flake check.
             determinateChecks = {
