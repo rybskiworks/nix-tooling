@@ -7,7 +7,9 @@ let
   isContent = value: builtins.isPath value || nixpkgs.lib.isDerivation value;
   isPkgs = pkgs: builtins.isAttrs pkgs && pkgs ? stdenv && pkgs ? dockerTools;
 in
-{
+rec {
+  inherit (import ./nixos-image.nix { inherit mkImage mkNixosSystem; }) mkNixosImage mkNixosLayer;
+
   # Keep dockerTools' archive, stream and layer semantics; no implicit guest tools.
   mkImage =
     {
