@@ -31,6 +31,7 @@ nix-tooling/
 | `git-hooks.nix` | `27555e2624241fb116b49095df4caaee85a25691` | `nixpkgs` | No `hooks.tombi`; `hooks.treefmt.settings.fail-on-change` defaults `true`. |
 | `fenix` | `fa09e6473a0dfd673e6cb9a37741aec513b4bb2a` (rustc 1.97.1) | `nixpkgs` (tooling) | **Owned pin** — consumer must NOT `follows`-override `tooling.inputs.fenix` so the toolchain stays reproducible. |
 | `beads` | `6c124203e771433a3550c348771a5b5e27fd3c21` (1.2.2) | `nixpkgs` | Upstream's embedded-capable Go package, built with the shared package set. |
+| `determinate` | `cb76ac22754f6b36c008a3c39477c174a146dd6b` (3.22.3) | Supplier locks preserved | Opt-in supported guest engine/Nixd; preserves upstream binary-cache identities. |
 
 *Follows discipline*: consumers follow the shared inputs owned here, including the curated Fenix revision. Remove inverse `tooling.inputs.nixpkgs.follows = "nixpkgs"` overrides when following `tooling/nixpkgs`, since combining both directions creates a cycle. When composing consumers, make their `tooling` inputs follow the root's `tooling` input.
 
@@ -88,6 +89,9 @@ git-hooks.hooks.treefmt.settings.fail-on-change = lib.mkForce true;  # CI fail-c
 For explicit, runtime-neutral image assembly and an optional NixOS-derived
 configuration, see [Shared guest images](docs/guest-images.md). The guest library
 does not change the default tooling package or choose a Nix engine/daemon.
+The separate [supported Determinate guest profile](docs/determinate-guests.md)
+selects the official engine and Nixd only when imported; its NixOS VM test is
+explicitly opt-in and does not run with ordinary tooling checks.
 
 Add as a flake input:
 
@@ -175,10 +179,17 @@ The [pinned devenv cache configuration](https://github.com/cachix/devenv/blob/97
 ## Checks
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
-- `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`, `checks.tombi-sync` (tombi-sync fails on drift between the vendored `tombi.toml` and canonical `share/tombi-format.toml`)
+- The [full check recipe](#development) validates all outputs and runs the eight ordinary checks: formatting, hooks, Tombi, Beads, and both guest contracts. Tombi sync rejects drift from `share/tombi-format.toml`.
 - `nix build .#checks.x86_64-linux.beads-version` → verifies the pinned CLI version and help without creating a tracker
 - `nix build .#checks.x86_64-linux.beads-embedded` → creates, exports, and queries one issue in disposable embedded storage without installing hooks or repository instructions
 - `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
+
+Whole-flake validation also evaluates the development shell, so bare
+`nix flake check` needs the explicit root input shown below. The repository's
+unused automatic shell/process container outputs are disabled; shared modules
+retain consumers' container capability. Disabling those outputs does not remove
+the development shell's explicit-root requirement. Checking does not enter the
+shell or run its hooks, and the optional NixOS VM test is not an ordinary check.
 
 ## Git hooks
 
@@ -212,7 +223,12 @@ default (`git-hooks.install.enable = lib.mkDefault false` in
 ```sh
 export PATH="/nix/store/<hash>-nix-<version>/bin:$PATH" # only needed when nix is not already on PATH
 nix flake lock
-nix flake check
+tooling_root_file="$(mktemp)"
+trap 'rm -f "$tooling_root_file"' EXIT
+printf '%s' "$PWD" > "$tooling_root_file"
+nix flake check --no-update-lock-file \
+  --option allow-import-from-derivation false --max-jobs 1 --cores 2 \
+  --override-input devenv-root "file+file://$tooling_root_file"
 nix fmt
 ./scripts/devenv-shell.sh -c tombi --version
 ```
