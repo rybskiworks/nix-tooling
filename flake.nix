@@ -43,6 +43,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Preserve the official engine/Nixd package sets and their binary-cache identities.
+    # Guest NixOS modules still receive the consumer's explicit nixpkgs.pkgs.
+    determinate.url = "github:DeterminateSystems/determinate/cb76ac22754f6b36c008a3c39477c174a146dd6b";
+
     # Placeholder for pure evaluation: devenv's auto-imported readDevenvRoot
     # module sets devenv.root from builtins.readFile of this input when the
     # content is non-empty; /dev/null reads as "" (override inert, keeps
@@ -95,6 +99,9 @@
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
         nixosModules.guestBase = ./nixosModules/guest-base.nix;
+        nixosModules.determinateGuest = import ./nixosModules/determinate-guest.nix {
+          inherit (inputs) determinate nixpkgs;
+        };
       };
 
       perSystem =
@@ -111,6 +118,10 @@
           guestChecks = import ./tests/guest {
             pkgs = pkgsWithFenix;
             guest = import ./lib/guest { inherit (inputs) nixpkgs; };
+          };
+          determinateChecks = import ./tests/determinate {
+            pkgs = pkgsWithFenix;
+            inherit (inputs) determinate nixpkgs;
           };
         in
         {
@@ -176,6 +187,7 @@
           # Additional check: tombiCheck via filtered src (mirrors workestrate's lib.checks.tombiCheck)
           checks = {
             guest-contract = guestChecks.contract;
+            determinate-contract = determinateChecks.contract;
 
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"
@@ -283,15 +295,25 @@
             beads = beadsPkg;
             default = tombiPkg;
             guest-minimal = guestChecks.image;
+            determinate-nix = inputs.determinate.inputs.nix.packages.${system}.default;
+            determinate-nixd = inputs.determinate.packages.${system}.default;
           };
 
           # Image realization stays explicit; ordinary tooling checks are small.
           legacyPackages.guestChecks = {
             inherit (guestChecks) archive closure;
           };
+          # The VM is opt-in and never part of an ordinary tooling flake check.
+          legacyPackages.determinateChecks = {
+            inherit (determinateChecks) nixos;
+          };
 
           # Dogfooding devShell: uses its own devenvModules.
           devenv.shells.default = {
+            # This repository does not publish shell/process container images.
+            # Keep optional container dependencies out of its own output graph.
+            containers = pkgsWithFenix.lib.mkForce { };
+
             # devenv.root is intentionally NOT set here: the auto-imported
             # readDevenvRoot module (inputs.devenv.flakeModule) sets it from
             # the `devenv-root` input placeholder (see inputs above;
