@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "beads": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786765402,
+        "narHash": "sha256-HSZ1z4WaHQDPomW6nNs8iUnld36BuHnOVaODD5mxY00=",
+        "owner": "gastownhall",
+        "repo": "beads",
+        "rev": "6c124203e771433a3550c348771a5b5e27fd3c21",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gastownhall",
+        "repo": "beads",
+        "rev": "6c124203e771433a3550c348771a5b5e27fd3c21",
+        "type": "github"
+      }
+    },
     "cachix": {
       "inputs": {
         "devenv": [
@@ -293,6 +314,7 @@
     },
     "root": {
       "inputs": {
+        "beads": "beads",
         "devenv": "devenv",
         "devenv-root": "devenv-root",
         "fenix": "fenix",

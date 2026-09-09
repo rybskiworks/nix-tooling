@@ -1,6 +1,6 @@
 # nix-tooling
 
-Shared Nix dev tooling for the `rybskiworks` flakes: formatter, git-hooks, Tombi, and Rust via fenix.
+Shared Nix dev tooling for the `rybskiworks` flakes: formatter, git-hooks, Tombi, Rust via fenix, and Beads.
 
 This flake is designed as a **sibling** to `workestrate` (`path:../nix-tooling` locally, `github:rybskiworks/nix-tooling` when published) and exposes reusable `devenvModules` so consumers can opt-in without pulling in unwanted tooling.
 
@@ -14,7 +14,8 @@ nix-tooling/
 │   ├── base.nix              # treefmt + typos + shell fundamentals
 │   ├── nix.nix               # nixfmt + statix (+ deadnix)
 │   ├── toml.nix              # Tombi handling (custom formatter + lint hook)
-│   └── rust.nix              # fenix stable toolchain + rustfmt/clippy (hooks opt-in, mkDefault false)
+│   ├── rust.nix              # fenix stable toolchain + rustfmt/clippy (hooks opt-in, mkDefault false)
+│   └── beads.nix             # pinned Beads CLI only; no database or hook initialization
 ├── tombi.toml
 └── README.md
 ```
@@ -29,6 +30,7 @@ nix-tooling/
 | `treefmt-nix` | `27b3b12a8e6375f28ebe122f07d230ca5459bbfa` | `nixpkgs` | No `programs.tombi` (128 programs checked). |
 | `git-hooks.nix` | `27555e2624241fb116b49095df4caaee85a25691` | `nixpkgs` | No `hooks.tombi`; `hooks.treefmt.settings.fail-on-change` defaults `true`. |
 | `fenix` | `fa09e6473a0dfd673e6cb9a37741aec513b4bb2a` (rustc 1.97.1) | `nixpkgs` (tooling) | **Owned pin** — consumer must NOT `follows`-override `tooling.inputs.fenix` so the toolchain stays reproducible. |
+| `beads` | `6c124203e771433a3550c348771a5b5e27fd3c21` (1.2.2) | `nixpkgs` | Upstream's embedded-capable Go package, built with the shared package set. |
 
 *Follows discipline*: consumers follow the shared inputs owned here, including the curated Fenix revision. Remove inverse `tooling.inputs.nixpkgs.follows = "nixpkgs"` overrides when following `tooling/nixpkgs`, since combining both directions creates a cycle. When composing consumers, make their `tooling` inputs follow the root's `tooling` input.
 
@@ -121,6 +123,37 @@ outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs;
 
 Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` — see `flake.nix` `perSystem.devenv.shells.default`.
 
+### Beads task tracking
+
+Use the pinned CLI without entering a development shell:
+
+```sh
+nix run .#beads -- version
+nix run .#beads -- --help
+```
+
+Consumers can add `inputs.tooling.packages.${system}.beads` to their packages or
+opt into `inputs.tooling.devenvModules.beads`. The module only adds the CLI to
+`PATH`: it does not initialize a database, install hooks, edit repository
+instructions, start a server, or synchronize a remote.
+
+The pin follows the [tested 1.2.2 release](https://github.com/gastownhall/beads/releases/tag/v1.2.2),
+not the retracted 1.2.0/1.2.1 releases. Upstream's flake builds the embedded Dolt
+engine into the CLI; using this package does not require a separate Dolt server.
+
+Installing a CLI and upgrading an existing tracker are separate operations.
+Before opening an older tracker, stop its writers and preserve its full `.beads`
+directory, including ignored database files. Rehearse upgrades on a disposable
+copy and compare issue exports before changing the original. JSONL exports are
+useful for comparison but do not preserve full Dolt history. In 1.2.2 even a
+read-only command can run version-upgrade initialization before opening its
+read-only store; `version` and `--help` do not open the database.
+
+Keep database synchronization and migration explicit. Do not run `bd init`,
+`bd setup`, `bd hooks install`, `bd bootstrap`, or `bd dolt push` from shell entry
+hooks. Hook installation must be reviewed separately to preserve repository
+validation gates and commit-message policy.
+
 The Rust module requires the pinned Fenix overlay and fails evaluation if it is absent. Build Rust packages with `pkgs.makeRustPlatform` using the same `pkgs.fenix.stable.cargo` and `pkgs.fenix.stable.rustc`. Consumers that expose a separate flake formatter should also select `pkgs.fenix.stable.rustfmt` in their `treefmt.config.programs.rustfmt.package`; enabling rustfmt alone selects nixpkgs' formatter. Static-musl packages need their target standard library and linker configured explicitly when sharing this compiler.
 
 An application-independent bootstrap shell still needs devenv's task runner under the flakes integration. The pinned devenv task package deliberately uses its own locked nixpkgs and Rust toolchain to preserve upstream binary-cache compatibility. A source build can therefore fetch another compiler, Rust documentation, and native build tools even though the development shell uses the shared Fenix compiler. Bootstrap removes application build dependencies; it does not guarantee a small initial tooling download.
@@ -139,6 +172,8 @@ The [pinned devenv cache configuration](https://github.com/cachix/devenv/blob/97
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
 - `nix flake check` → `checks.treefmt`, `checks.pre-commit`, `checks.tombiCheck`, `checks.tombi-sync` (tombi-sync fails on drift between the vendored `tombi.toml` and canonical `share/tombi-format.toml`)
+- `nix build .#checks.x86_64-linux.beads-version` → verifies the pinned CLI version and help without creating a tracker
+- `nix build .#checks.x86_64-linux.beads-embedded` → creates, exports, and queries one issue in disposable embedded storage without installing hooks or repository instructions
 - `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
 
 ## Git hooks

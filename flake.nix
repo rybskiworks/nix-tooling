@@ -38,6 +38,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    beads = {
+      url = "github:gastownhall/beads/6c124203e771433a3550c348771a5b5e27fd3c21";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Placeholder for pure evaluation: devenv's auto-imported readDevenvRoot
     # module sets devenv.root from builtins.readFile of this input when the
     # content is non-empty; /dev/null reads as "" (override inert, keeps
@@ -85,6 +90,7 @@
         nix = ./devenvModules/nix.nix;
         toml = ./devenvModules/toml.nix;
         rust = ./devenvModules/rust.nix;
+        beads = import ./devenvModules/beads.nix inputs.beads;
       };
 
       perSystem =
@@ -97,6 +103,7 @@
             config.allowUnfree = true;
           };
           tombiPkg = pkgsWithFenix.callPackage ./packages/tombi.nix { };
+          beadsPkg = inputs.beads.packages.${system}.bd;
         in
         {
           # Ensure all perSystem modules see the fenix overlay.
@@ -160,6 +167,55 @@
           # flakeModule already creates `checks.pre-commit`; no extra wiring needed.
           # Additional check: tombiCheck via filtered src (mirrors workestrate's lib.checks.tombiCheck)
           checks = {
+            beads-version =
+              pkgsWithFenix.runCommand "beads-version-check"
+                {
+                  nativeBuildInputs = [ beadsPkg ];
+                  env.BD_DISABLE_METRICS = "1";
+                  env.BD_DISABLE_EVENT_FLUSH = "1";
+                }
+                ''
+                  export BEADS_DIR="$TMPDIR/no-database"
+                  mkdir -p $out
+                  bd version | tee $out/version
+                  grep -F 'bd version 1.2.2' $out/version
+                  bd --help > $out/help
+                  test ! -e "$BEADS_DIR"
+                '';
+
+            beads-embedded =
+              pkgsWithFenix.runCommand "beads-embedded-check"
+                {
+                  nativeBuildInputs = [
+                    beadsPkg
+                    pkgsWithFenix.gitMinimal
+                    pkgsWithFenix.jq
+                  ];
+                  env.BD_DISABLE_METRICS = "1";
+                  env.BD_DISABLE_EVENT_FLUSH = "1";
+                }
+                ''
+                  export BEADS_DIR="$TMPDIR/project/.beads"
+                  export DOLT_ROOT_PATH="$TMPDIR/dolt-global"
+                  export XDG_CONFIG_HOME="$TMPDIR/xdg-config"
+                  export XDG_CACHE_HOME="$TMPDIR/xdg-cache"
+                  mkdir -p "$TMPDIR/project" $out
+                  cd "$TMPDIR/project"
+                  git init -q --initial-branch=main
+                  git config user.name 'Beads package check'
+                  git config user.email 'beads-check@example.invalid'
+                  bd --sandbox init --prefix smoke --skip-hooks --skip-agents --non-interactive --quiet
+                  bd --sandbox create 'Verify embedded storage' --type task --json > $out/created.json
+                  bd --sandbox --readonly export --all -o $out/issues.jsonl
+                  jq -se 'length == 1 and .[0].title == "Verify embedded storage"' $out/issues.jsonl
+                  bd --sandbox --readonly ready --json > $out/ready.json
+                  jq -e 'length == 1' $out/ready.json
+                  test ! -e AGENTS.md
+                  test ! -e .git/hooks/pre-commit
+                  test ! -e .git/hooks/pre-push
+                  test ! -e .git/hooks/prepare-commit-msg
+                '';
+
             # The treefmt and pre-commit checks are auto-generated via the modules above.
             # We add a standalone tombi check that validates format+lint on the full repo with TOMBI_OFFLINE.
             tombiCheck =
@@ -214,6 +270,7 @@
           # Packages
           packages = {
             tombi = tombiPkg;
+            beads = beadsPkg;
             default = tombiPkg;
           };
 
