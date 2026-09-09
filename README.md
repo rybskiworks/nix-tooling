@@ -134,6 +134,35 @@ outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs;
 
 Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` — see `flake.nix` `perSystem.devenv.shells.default`.
 
+### Determinate Nix in development shells
+
+Import `inputs.tooling.devenvModules.determinate` to put the same pinned
+Determinate client as the guest base on the shell's `PATH`. The module adds
+only `packages.${system}.determinate-nix`: it does not install or restart a
+daemon, change Nix settings, select a store, initialize state or run an
+installer at shell entry. The tooling repository uses this module itself.
+It explicitly selects the executable output with `lib.getBin`, avoiding the
+separate Nix C++ development output that an unqualified shell input can select.
+
+```nix
+devenv.shells.default.imports = [
+  inputs.tooling.devenvModules.determinate
+  inputs.tooling.devenvModules.base
+  inputs.tooling.devenvModules.nix
+];
+```
+
+Remove separately listed `pkgs.nix` from consumer shells to avoid competing
+clients on `PATH`. For executable wrappers, select
+`inputs.tooling.packages.${system}.determinate-nix` explicitly. This does not
+replace devenv's own internally pinned evaluation implementation or rewrite
+supplier inputs. The formatter-only `devenvModules.nix` remains unchanged.
+Verify the actual selected executable with `command -v nix` and `nix --version`
+inside the entered shell; a client package check is not a daemon handshake.
+
+Host daemon migration and guest daemon activation remain separate operations;
+the shared NixOS guest profile supplies the supported matched client/Nixd pair.
+
 ### Beads task tracking
 
 Use the pinned CLI without entering a development shell:
