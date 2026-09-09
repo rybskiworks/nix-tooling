@@ -1,5 +1,26 @@
 {
   "nodes": {
+    "beads": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1786765402,
+        "narHash": "sha256-HSZ1z4WaHQDPomW6nNs8iUnld36BuHnOVaODD5mxY00=",
+        "owner": "gastownhall",
+        "repo": "beads",
+        "rev": "6c124203e771433a3550c348771a5b5e27fd3c21",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gastownhall",
+        "repo": "beads",
+        "rev": "6c124203e771433a3550c348771a5b5e27fd3c21",
+        "type": "github"
+      }
+    },
     "cachix": {
       "inputs": {
         "devenv": [
@@ -209,21 +230,6 @@
         "type": "github"
       }
     },
-    "mk-shell-bin": {
-      "locked": {
-        "lastModified": 1677004959,
-        "narHash": "sha256-/uEkr1UkJrh11vD02aqufCxtbF5YnhRTIKlx5kyvf+I=",
-        "owner": "rrbutani",
-        "repo": "nix-mk-shell-bin",
-        "rev": "ff5d8bd4d68a347be5042e2f16caee391cd75887",
-        "type": "github"
-      },
-      "original": {
-        "owner": "rrbutani",
-        "repo": "nix-mk-shell-bin",
-        "type": "github"
-      }
-    },
     "nix": {
       "inputs": {
         "flake-compat": [
@@ -261,26 +267,6 @@
         "owner": "cachix",
         "ref": "devenv-2.35",
         "repo": "nix",
-        "type": "github"
-      }
-    },
-    "nix2container": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1775487831,
-        "narHash": "sha256-2lguQpLPQaxpQCJjXhmEEAfabwsAhkP29Z7fgLzHARA=",
-        "owner": "nlewo",
-        "repo": "nix2container",
-        "rev": "76be9608a7f4d6c985d28b0e7be903ae2547df3e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nlewo",
-        "repo": "nix2container",
         "type": "github"
       }
     },
@@ -328,13 +314,12 @@
     },
     "root": {
       "inputs": {
+        "beads": "beads",
         "devenv": "devenv",
         "devenv-root": "devenv-root",
         "fenix": "fenix",
         "flake-parts": "flake-parts",
         "git-hooks": "git-hooks",
-        "mk-shell-bin": "mk-shell-bin",
-        "nix2container": "nix2container",
         "nixpkgs": "nixpkgs",
         "treefmt-nix": "treefmt-nix_2"
       }

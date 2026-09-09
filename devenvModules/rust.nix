@@ -27,51 +27,31 @@ let
   fenixToolchain =
     if pkgs ? fenix && pkgs.fenix ? stable then
       pkgs.fenix.stable
-    else if pkgs ? fenix && pkgs.fenix ? complete then
-      pkgs.fenix.complete.toolchain
     else
-      pkgs; # fallback; will error visibly if fenix overlay missing
-
-  # Derive rustfmt package for treefmt. Prefer fenix's rustfmt if available.
-  rustfmtPkg = fenixToolchain.rustfmt or pkgs.rustfmt or pkgs.rustPackages.rustfmt or null;
+      throw "nix-tooling's Rust module requires the pinned Fenix overlay in pkgs";
 in
 {
   # Disable devenv's languages.rust (rust-overlay channel) — we own the toolchain via fenix.
   languages.rust.enable = lib.mkDefault false;
 
-  packages = lib.mkMerge [
-    (lib.mkIf (pkgs ? fenix && pkgs.fenix ? stable) [
-      fenixToolchain.cargo
-      fenixToolchain.rustc
-      fenixToolchain.clippy
-      fenixToolchain.rustfmt
-      fenixToolchain.rust-analyzer
-    ])
-    # Include rust-src for rust-analyzer if available (not all fenix sets expose it at top-level)
-    (lib.mkIf (pkgs ? fenix && pkgs.fenix ? stable && fenixToolchain ? rust-src) [
-      fenixToolchain.rust-src
-    ])
-    (lib.mkIf (!(pkgs ? fenix && pkgs.fenix ? stable)) [
-      # Fallback if overlay not applied (should not happen in normal flake use)
-      pkgs.cargo
-      pkgs.rustc
-      pkgs.clippy
-      pkgs.rustfmt
-      pkgs.rust-analyzer
-    ])
-  ];
+  packages = [
+    fenixToolchain.cargo
+    fenixToolchain.rustc
+    fenixToolchain.clippy
+    fenixToolchain.rustfmt
+    fenixToolchain.rust-analyzer
+  ]
+  ++ lib.optional (fenixToolchain ? rust-src) fenixToolchain.rust-src;
 
-  treefmt.config.programs.rustfmt = lib.mkMerge [
-    {
-      enable = lib.mkDefault true;
-      # Codebase is edition-2024-clean by design (workestrate's
-      # control/agentctl pins edition = "2024" in its Cargo.toml; `gen`
-      # identifiers were renamed to `generator` in f20bfca). Default to the
-      # modern edition; mkDefault so consumers on older editions can override.
-      edition = lib.mkDefault "2024";
-    }
-    (lib.mkIf (rustfmtPkg != null) { package = lib.mkDefault rustfmtPkg; })
-  ];
+  treefmt.config.programs.rustfmt = {
+    enable = lib.mkDefault true;
+    # Codebase is edition-2024-clean by design (workestrate's
+    # control/agentctl pins edition = "2024" in its Cargo.toml; `gen`
+    # identifiers were renamed to `generator` in f20bfca). Default to the
+    # modern edition; mkDefault so consumers on older editions can override.
+    edition = lib.mkDefault "2024";
+    package = lib.mkDefault fenixToolchain.rustfmt;
+  };
 
   git-hooks.hooks = {
     rustfmt.enable = lib.mkDefault false;
