@@ -115,6 +115,12 @@
           };
           tombiPkg = pkgsWithFenix.callPackage ./packages/tombi.nix { };
           beadsPkg = inputs.beads.packages.${system}.bd;
+          doltPkg = pkgsWithFenix.callPackage ./packages/dolt-bin.nix { };
+          beadsServerChecks = import ./tests/beads-server {
+            pkgs = pkgsWithFenix;
+            beads = beadsPkg;
+            dolt = doltPkg;
+          };
           guestChecks = import ./tests/guest {
             pkgs = pkgsWithFenix;
             guest = import ./lib/guest { inherit (inputs) nixpkgs; };
@@ -188,6 +194,7 @@
           checks = {
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
+            beads-server-contract = beadsServerChecks.contract;
 
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"
@@ -293,6 +300,7 @@
           packages = {
             tombi = tombiPkg;
             beads = beadsPkg;
+            dolt-bin = doltPkg;
             default = tombiPkg;
             guest-minimal = guestChecks.image;
             determinate-nix = inputs.determinate.inputs.nix.packages.${system}.default;
@@ -300,12 +308,17 @@
           };
 
           # Image realization stays explicit; ordinary tooling checks are small.
-          legacyPackages.guestChecks = {
-            inherit (guestChecks) archive closure;
-          };
-          # The VM is opt-in and never part of an ordinary tooling flake check.
-          legacyPackages.determinateChecks = {
-            inherit (determinateChecks) nixos;
+          legacyPackages = {
+            guestChecks = {
+              inherit (guestChecks) archive closure;
+            };
+            # The VM is opt-in and never part of an ordinary tooling flake check.
+            determinateChecks = {
+              inherit (determinateChecks) nixos;
+            };
+            beadsChecks = {
+              inherit (beadsServerChecks) server;
+            };
           };
 
           # Dogfooding devShell: uses its own devenvModules.
