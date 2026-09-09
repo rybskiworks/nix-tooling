@@ -85,6 +85,10 @@ git-hooks.hooks.treefmt.settings.fail-on-change = lib.mkForce true;  # CI fail-c
 
 ## Usage
 
+For explicit, runtime-neutral image assembly and an optional NixOS-derived
+configuration, see [Shared guest images](docs/guest-images.md). The guest library
+does not change the default tooling package or choose a Nix engine/daemon.
+
 Add as a flake input:
 
 ```nix

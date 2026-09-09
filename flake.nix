@@ -85,12 +85,16 @@
 
       # Expose devenv modules as reusable flakes outputs.
       # Consumers: `devenv.shells.default.imports = [ inputs.tooling.devenvModules.base ... ]`
-      flake.devenvModules = {
-        base = ./devenvModules/base.nix;
-        nix = ./devenvModules/nix.nix;
-        toml = ./devenvModules/toml.nix;
-        rust = ./devenvModules/rust.nix;
-        beads = import ./devenvModules/beads.nix inputs.beads;
+      flake = {
+        devenvModules = {
+          base = ./devenvModules/base.nix;
+          nix = ./devenvModules/nix.nix;
+          toml = ./devenvModules/toml.nix;
+          rust = ./devenvModules/rust.nix;
+          beads = import ./devenvModules/beads.nix inputs.beads;
+        };
+        lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
+        nixosModules.guestBase = ./nixosModules/guest-base.nix;
       };
 
       perSystem =
@@ -104,6 +108,10 @@
           };
           tombiPkg = pkgsWithFenix.callPackage ./packages/tombi.nix { };
           beadsPkg = inputs.beads.packages.${system}.bd;
+          guestChecks = import ./tests/guest {
+            pkgs = pkgsWithFenix;
+            guest = import ./lib/guest { inherit (inputs) nixpkgs; };
+          };
         in
         {
           # Ensure all perSystem modules see the fenix overlay.
@@ -167,6 +175,8 @@
           # flakeModule already creates `checks.pre-commit`; no extra wiring needed.
           # Additional check: tombiCheck via filtered src (mirrors workestrate's lib.checks.tombiCheck)
           checks = {
+            guest-contract = guestChecks.contract;
+
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"
                 {
@@ -272,6 +282,12 @@
             tombi = tombiPkg;
             beads = beadsPkg;
             default = tombiPkg;
+            guest-minimal = guestChecks.image;
+          };
+
+          # Image realization stays explicit; ordinary tooling checks are small.
+          legacyPackages.guestChecks = {
+            inherit (guestChecks) archive closure;
           };
 
           # Dogfooding devShell: uses its own devenvModules.
