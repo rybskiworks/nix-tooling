@@ -92,6 +92,9 @@ does not change the default tooling package or choose a Nix engine/daemon.
 The separate [supported Determinate guest profile](docs/determinate-guests.md)
 selects the official engine and Nixd only when imported; its NixOS VM test is
 explicitly opt-in and does not run with ordinary tooling checks.
+The [external Beads SQL server contract](docs/beads-server.md) provides a
+pinned `dolt-bin` package and a separately selected native compatibility test;
+ordinary checks never start a SQL server or initialize a tracker.
 
 Add as a flake input:
 
@@ -179,7 +182,7 @@ The [pinned devenv cache configuration](https://github.com/cachix/devenv/blob/97
 ## Checks
 
 - `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
-- The [full check recipe](#development) validates all outputs and runs the eight ordinary checks: formatting, hooks, Tombi, Beads, and both guest contracts. Tombi sync rejects drift from `share/tombi-format.toml`.
+- The [full check recipe](#development) validates all outputs and runs the nine ordinary checks: formatting, hooks, Tombi, Beads, both guest contracts, and the pure SQL-service contract. Tombi sync rejects drift from `share/tombi-format.toml`.
 - `nix build .#checks.x86_64-linux.beads-version` → verifies the pinned CLI version and help without creating a tracker
 - `nix build .#checks.x86_64-linux.beads-embedded` → creates, exports, and queries one issue in disposable embedded storage without installing hooks or repository instructions
 - `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
