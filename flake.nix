@@ -96,6 +96,7 @@
           toml = ./devenvModules/toml.nix;
           rust = ./devenvModules/rust.nix;
           beads = import ./devenvModules/beads.nix inputs.beads;
+          determinate = import ./devenvModules/determinate.nix inputs.determinate;
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
         nixosModules = {
@@ -214,6 +215,10 @@
           checks = {
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
+            determinate-client = import ./tests/determinate/client.nix {
+              pkgs = pkgsWithFenix;
+              inherit (inputs) determinate;
+            };
             beads-server-contract = beadsServerChecks.contract;
             nixos-image-contract = nixosImages.contract;
 
@@ -367,6 +372,7 @@
             # dotfile = <root>/.devenv (gitignored in-tree), state follows.
 
             imports = [
+              (import ./devenvModules/determinate.nix inputs.determinate)
               ./devenvModules/base.nix
               ./devenvModules/nix.nix
               ./devenvModules/toml.nix
