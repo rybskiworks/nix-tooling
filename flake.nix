@@ -144,12 +144,14 @@
             maxLayers = 64;
             modules = [
               (import ./nixosModules/determinate-guest.nix { inherit (inputs) determinate nixpkgs; })
+              (import ./nixosModules/devenv-cache.nix inputs.devenv)
             ];
           };
           nixosImages = import ./tests/nixos-image {
             pkgs = pkgsWithFenix;
             guest = guestLib;
             base = commonGuestBase;
+            nixd = inputs.determinate.packages.${system}.default;
           };
         in
         {
@@ -345,7 +347,13 @@
               inherit (guestChecks) archive closure;
             };
             nixosImages = {
-              inherit (nixosImages) base leaf;
+              inherit (nixosImages)
+                base
+                leaf
+                grandchild
+                layerInheritance
+                smokeSpec
+                ;
             };
             # The VM is opt-in and never part of an ordinary tooling flake check.
             determinateChecks = {

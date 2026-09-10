@@ -1,0 +1,237 @@
+{
+  "name": "fixture",
+  "status": "Running",
+  "pending_changes": [],
+  "config": {
+    "deployment_profile": "single_tenant",
+    "env": [
+      {
+        "key": "PATH",
+        "value": "/run/current-system/sw/bin"
+      },
+      {
+        "key": "NIX_REMOTE",
+        "value": "daemon"
+      }
+    ],
+    "image": {
+      "Oci": {
+        "reference": "localhost:9/base:fixture",
+        "root_disk": {
+          "kind": "managed",
+          "size_mib": 4096
+        }
+      }
+    },
+    "init": {
+      "args": [],
+      "cmd": "/init",
+      "env": [
+        [
+          "container",
+          "microsandbox"
+        ]
+      ]
+    },
+    "labels": {},
+    "lifecycle": {
+      "ephemeral": false,
+      "idle_timeout_secs": null,
+      "max_duration_secs": 300
+    },
+    "manifest_digest": "sha256:8a417c0dfb3feb2b7cb911b0553db3b06a8e38f3b94e345aec5e22a4a5451cf6",
+    "mounts": [
+      {
+        "guest": "/tmp",
+        "options": {
+          "nodev": false,
+          "noexec": false,
+          "nosuid": false,
+          "readonly": false
+        },
+        "size_mib": 512,
+        "type": "Tmpfs"
+      }
+    ],
+    "name": "fixture",
+    "network": {
+      "dns": {
+        "nameservers": [],
+        "query_timeout_ms": 5000,
+        "rebind_protection": true
+      },
+      "enabled": true,
+      "interface": {},
+      "max_connections": null,
+      "policy": {
+        "default_egress": "deny",
+        "default_ingress": "deny",
+        "rules": []
+      },
+      "ports": [],
+      "secrets": {
+        "on_violation": "block-and-log",
+        "secrets": []
+      },
+      "tls": {
+        "block_quic_on_intercept": true,
+        "bypass": [],
+        "cache": {
+          "capacity": 1000,
+          "validity_hours": 24
+        },
+        "enabled": false,
+        "intercept_ca": {
+          "cert_path": null,
+          "key_path": null
+        },
+        "intercepted_ports": [
+          443
+        ],
+        "scoped_upstream_ca_cert": [],
+        "scoped_verify_upstream": [],
+        "upstream_ca_cert": [],
+        "verify_upstream": true
+      },
+      "trust_host_cas": false
+    },
+    "patches": [],
+    "pull_policy": "Never",
+    "resources": {
+      "cpus": 1,
+      "max_cpus": 1,
+      "max_memory_mib": 2048,
+      "memory_mib": 2048
+    },
+    "rlimits": [],
+    "runtime": {
+      "cmd": null,
+      "disable_metrics_sample": false,
+      "entrypoint": null,
+      "hostname": null,
+      "log_level": "debug",
+      "metrics_sample_interval_ms": 1000,
+      "scripts": {},
+      "shell": "/bin/sh",
+      "user": null,
+      "workdir": "/"
+    },
+    "security_profile": "default"
+  },
+  "active_config": {
+    "deployment_profile": "single_tenant",
+    "env": [
+      {
+        "key": "PATH",
+        "value": "/run/current-system/sw/bin"
+      },
+      {
+        "key": "NIX_REMOTE",
+        "value": "daemon"
+      }
+    ],
+    "image": {
+      "Oci": {
+        "reference": "localhost:9/base:fixture",
+        "root_disk": {
+          "kind": "managed",
+          "size_mib": 4096
+        }
+      }
+    },
+    "init": {
+      "args": [],
+      "cmd": "/init",
+      "env": [
+        [
+          "container",
+          "microsandbox"
+        ]
+      ]
+    },
+    "labels": {},
+    "lifecycle": {
+      "ephemeral": false,
+      "idle_timeout_secs": null,
+      "max_duration_secs": 300
+    },
+    "manifest_digest": "sha256:8a417c0dfb3feb2b7cb911b0553db3b06a8e38f3b94e345aec5e22a4a5451cf6",
+    "mounts": [
+      {
+        "guest": "/tmp",
+        "options": {
+          "nodev": false,
+          "noexec": false,
+          "nosuid": false,
+          "readonly": false
+        },
+        "size_mib": 512,
+        "type": "Tmpfs"
+      }
+    ],
+    "name": "fixture",
+    "network": {
+      "dns": {
+        "nameservers": [],
+        "query_timeout_ms": 5000,
+        "rebind_protection": true
+      },
+      "enabled": true,
+      "interface": {},
+      "max_connections": null,
+      "policy": {
+        "default_egress": "deny",
+        "default_ingress": "deny",
+        "rules": []
+      },
+      "ports": [],
+      "secrets": {
+        "on_violation": "block-and-log",
+        "secrets": []
+      },
+      "tls": {
+        "block_quic_on_intercept": true,
+        "bypass": [],
+        "cache": {
+          "capacity": 1000,
+          "validity_hours": 24
+        },
+        "enabled": false,
+        "intercept_ca": {
+          "cert_path": null,
+          "key_path": null
+        },
+        "intercepted_ports": [
+          443
+        ],
+        "scoped_upstream_ca_cert": [],
+        "scoped_verify_upstream": [],
+        "upstream_ca_cert": [],
+        "verify_upstream": true
+      },
+      "trust_host_cas": false
+    },
+    "patches": [],
+    "pull_policy": "Never",
+    "resources": {
+      "cpus": 1,
+      "max_cpus": 1,
+      "max_memory_mib": 2048,
+      "memory_mib": 2048
+    },
+    "rlimits": [],
+    "runtime": {
+      "cmd": null,
+      "disable_metrics_sample": false,
+      "entrypoint": null,
+      "hostname": null,
+      "log_level": "debug",
+      "metrics_sample_interval_ms": 1000,
+      "scripts": {},
+      "shell": "/bin/sh",
+      "user": null,
+      "workdir": "/"
+    },
+    "security_profile": "default"
+  }
+}
