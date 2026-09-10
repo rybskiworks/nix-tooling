@@ -13,6 +13,8 @@ let
       maxLayers,
       registrationName,
       finalCommands ? "",
+      parentStoreLayerConfigs ? [ ],
+      parentLayerBudget ? 0,
     }:
     let
       # Materialize caller customizations before computing their runtime closure.
@@ -32,7 +34,7 @@ let
       ];
       closure = pkgs.closureInfo { rootPaths = roots; };
       rootsText = pkgs.lib.concatMapStrings (root: "${root}\n") roots;
-      archive = mkImage {
+      unfilteredArchive = mkImage {
         inherit
           pkgs
           name
@@ -53,6 +55,18 @@ let
           ${finalCommands}
         '';
       };
+      # Read the supplier's emitted store-path inventory at build time, never
+      # an evaluated archive or a pruned Nix registration closure.
+      layerPipeline = pkgs.runCommand "${registrationName}-guest-layer-pipeline.json" { } ''
+        ${pkgs.buildPackages.python3}/bin/python3 -B ${./layer-pipeline.py} \
+          ${toString (maxLayers - parentLayerBudget - 1)} \
+          ${pkgs.lib.escapeShellArgs (map toString parentStoreLayerConfigs)} > "$out"
+      '';
+      archive =
+        if parentStoreLayerConfigs == [ ] then
+          unfilteredArchive
+        else
+          unfilteredArchive.override { layeringPipeline = layerPipeline; };
     in
     assert builtins.match "[a-z][a-z0-9-]*" registrationName != null;
     archive.overrideAttrs (old: {
@@ -66,6 +80,7 @@ let
             registrationName
             ;
         };
+        guestStoreLayerConfigs = parentStoreLayerConfigs ++ [ archive.stream.conf ];
       };
     });
 in
@@ -170,9 +185,15 @@ in
           check_leaf_root "$out"
         '';
         fromImage = base;
+        parentStoreLayerConfigs = base.guestStoreLayerConfigs;
+        parentLayerBudget = base.guestLayerBudget;
       };
     in
-    assert base ? guestInit && base ? guestRegistrationNames && base ? guestLayerBudget;
+    assert
+      base ? guestInit
+      && base ? guestRegistrationNames
+      && base ? guestLayerBudget
+      && base ? guestStoreLayerConfigs;
     # Reserve one payload and one customization layer beyond the parent bound,
     # without realizing its archive during evaluation.
     assert maxLayers >= base.guestLayerBudget + 2;

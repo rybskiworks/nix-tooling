@@ -102,6 +102,7 @@
         nixosModules = {
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
+          devenvCache = import ./nixosModules/devenv-cache.nix inputs.devenv;
           determinateGuest = import ./nixosModules/determinate-guest.nix {
             inherit (inputs) determinate nixpkgs;
           };
@@ -143,12 +144,14 @@
             maxLayers = 64;
             modules = [
               (import ./nixosModules/determinate-guest.nix { inherit (inputs) determinate nixpkgs; })
+              (import ./nixosModules/devenv-cache.nix inputs.devenv)
             ];
           };
           nixosImages = import ./tests/nixos-image {
             pkgs = pkgsWithFenix;
             guest = guestLib;
             base = commonGuestBase;
+            nixd = inputs.determinate.packages.${system}.default;
           };
         in
         {
@@ -218,6 +221,10 @@
             determinate-client = import ./tests/determinate/client.nix {
               pkgs = pkgsWithFenix;
               inherit (inputs) determinate;
+            };
+            devenv-cache-contract = import ./tests/determinate/devenv-cache.nix {
+              pkgs = pkgsWithFenix;
+              inherit (inputs) determinate nixpkgs devenv;
             };
             beads-server-contract = beadsServerChecks.contract;
             nixos-image-contract = nixosImages.contract;
@@ -341,7 +348,13 @@
               inherit (guestChecks) archive closure;
             };
             nixosImages = {
-              inherit (nixosImages) base leaf;
+              inherit (nixosImages)
+                base
+                leaf
+                grandchild
+                layerInheritance
+                smokeSpec
+                ;
             };
             # The VM is opt-in and never part of an ordinary tooling flake check.
             determinateChecks = {
