@@ -327,6 +327,7 @@
             tombi = tombiPkg;
             beads = beadsPkg;
             dolt-bin = doltPkg;
+            dolt-secure-transport = pkgsWithFenix.callPackage ./packages/dolt-source { };
             default = tombiPkg;
             guest-minimal = guestChecks.image;
             determinate-nix = inputs.determinate.inputs.nix.packages.${system}.default;

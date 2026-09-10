@@ -1,0 +1,11 @@
+diff --git a/go/mysql/server.go b/go/mysql/server.go
+--- a/go/mysql/server.go
++++ b/go/mysql/server.go
+@@ -491,3 +491,4 @@ func (l *Listener) handle(ctx context.Context, conn net.Conn, connectionID uint32,
+-		if l.RequireSecureTransport {
+-			c.writeErrorPacketFromError(vterrors.Errorf(vtrpc.Code_UNAVAILABLE, "server does not allow insecure connections, client must use SSL/TLS"))
+-		}
++		if l.RequireSecureTransport {
++			c.writeErrorPacketFromError(vterrors.Errorf(vtrpc.Code_UNAVAILABLE, "server does not allow insecure connections, client must use SSL/TLS"))
++			return
++		}
