@@ -96,6 +96,36 @@ the configuration interface used by this profile; use `nix.settings` for cache
 composition. SSH daemon access is not a read-only cache and needs its own
 privileged-builder trust boundary.
 
+### Opt-in public devenv cache
+
+Import `inputs.tooling.nixosModules.devenvCache` in a NixOS configuration to
+add only `https://devenv.cachix.org` and its public verification key. The key
+comes from the already-locked devenv source declaration, not live metadata.
+The module validates the declaration and deliberately excludes other caches
+advertised by that supplier. It preserves existing cache lists, the selected
+engine/daemon, sandboxing, signatures and root-only daemon trust. It does not
+enable automatic flake configuration or add packages, credentials or services.
+
+```nix
+modules = [
+  inputs.tooling.nixosModules.determinateGuest
+  inputs.tooling.nixosModules.devenvCache
+];
+```
+
+This is explicit trust in a public signing authority, not a private reader or
+upload credential. Neither importing the module nor configuring a cache grants
+network reachability. Review that separately, preserve devenv's own task-package
+inputs to retain supplier artifact identities, and inspect the dry-run before
+allowing a cache miss to become a source build.
+
+The exported default image is unchanged. Compose the module in a shared parent
+image before deriving package-only workload layers; do not replace individual
+leaves' managed `nix.conf`. `checks.x86_64-linux.devenv-cache-contract` checks
+the exact pinned declaration, rejected malformed declarations, additive NixOS
+composition and unchanged non-cache policy. It neither boots a guest nor proves
+live substitution, warm reuse, network policy or signature rejection.
+
 ## Checks and resource admission
 
 The small `checks.x86_64-linux.determinate-contract` evaluates package/module
