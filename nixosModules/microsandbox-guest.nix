@@ -45,6 +45,9 @@ in
     firewall.enable = false;
   };
   services.resolved.enable = false;
+  # The supplied firmware may not support NixOS's 64-bit four-million PID
+  # tuning. Preserve its kernel default; an explicit consumer value still wins.
+  boot.kernel.sysctl."kernel.pid_max" = lib.mkOverride 900 null;
   # Require the producer to mount volatile /run before creating runtime files.
   # Otherwise systemd would hide them under a fresh tmpfs during startup.
   boot.postBootCommands = lib.mkBefore ''
