@@ -102,6 +102,7 @@
         nixosModules = {
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
+          devenvCache = import ./nixosModules/devenv-cache.nix inputs.devenv;
           determinateGuest = import ./nixosModules/determinate-guest.nix {
             inherit (inputs) determinate nixpkgs;
           };
@@ -218,6 +219,10 @@
             determinate-client = import ./tests/determinate/client.nix {
               pkgs = pkgsWithFenix;
               inherit (inputs) determinate;
+            };
+            devenv-cache-contract = import ./tests/determinate/devenv-cache.nix {
+              pkgs = pkgsWithFenix;
+              inherit (inputs) determinate nixpkgs devenv;
             };
             beads-server-contract = beadsServerChecks.contract;
             nixos-image-contract = nixosImages.contract;
