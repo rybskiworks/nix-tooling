@@ -7,6 +7,50 @@ hash and release commit are recorded in `packages/dolt-bin.nix`. No shared
 nixpkgs upgrade, default tool change, database initialization, or service
 activation is implied by importing the flake.
 
+The official binary is not admitted for TLS-enforced deployment. Its pinned
+Vitess dependency writes a TLS-required error but continues the handshake;
+valid credentials can therefore continue without the required transport.
+This is a transport-enforcement defect, not an authentication or privilege
+bypass. The earlier compliant-client refusal check below does not establish
+that the server actually closes the connection.
+
+The opt-in `packages.x86_64-linux.dolt-secure-transport` candidate retains the
+same Dolt release and upstream module requirements, but uses an explicitly
+patched immutable Vitess source. The patch returns immediately after the
+refusal so the handler's existing cleanup closes the connection. Its Go test
+uses only in-memory pipes: exact rejection and buffered-reader EOF for valid
+and invalid credentials, plus an optional-transport handshake/Ping control.
+The build also removes the patch from a private copy and requires that the
+same regression fail specifically on post-refusal bytes before restoring and
+rechecking the patched mapping. The build-local manifest explicitly includes
+the package tests' `go-cmp` dependency at the version already required by the
+selected Protobuf module and recorded in Dolt's upstream checksums.
+
+The candidate's source and complete test-module NAR hashes are pinned. Its
+ordinary source build passed the patched-positive, patch-removed-negative and
+restored-positive regression phases:
+
+```sh
+nix build --offline --no-update-lock-file \
+  --option allow-import-from-derivation false \
+  --max-jobs 1 --cores 2 .#dolt-secure-transport
+```
+
+Separate disposable native SQL validation passed 62 TLS, authentication,
+selected-grant, offline-account-reopening and restart observations. Both
+server starts enforced actual terminal plaintext rejection; both normal stops
+exited zero without escalation, with no surviving process or listener. That
+result used executable SHA-256
+`5b85ebd834a056e413c17feb8f7e336ee72bcbd2e626a5402081e88498906eed`.
+Earlier fixture error-code mismatches remain failed runs; their correction
+requires exact expected actor/database or fixed write-query scope, never a
+generic SQL1105 error as a pass.
+
+The candidate remains opt-in. It does not replace `dolt-bin` automatically,
+establish actual guest service behavior or validate migration of existing
+trackers. No source or dependency is vendored into this repository, and the
+existing binary is not relabeled as repaired.
+
 This version matches the external-server fixture used by the pinned Beads
 1.2.2 source. Its embedded Dolt library is a separate identity. Compatibility
 with an existing tracker requires a copied-backup rehearsal; successful tests
