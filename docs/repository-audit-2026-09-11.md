@@ -12,7 +12,7 @@ observable governance. This is not a new boot, package or protocol validation.
 | High | Full checks were manual/label-only, not selected on main pushes. | Compile ordinary checks for source PRs, unknown diffs, main pushes, merge groups and manual runs. Only known narrative-only PRs may skip. |
 | High | Readable repository/inherited ruleset enumeration returned empty. | Disabled proposals and staged host-side verification; no administration settings changed. |
 | Medium | README used floating/sibling-input examples despite reproducibility requirements. | Immutable already-landed example, one-way follows and explicit local-override boundaries. |
-| Medium | README claimed hooks install on shell entry while the base module defaults installation off. | Document opt-in installation; keep daemon/tracker/state migration separate. |
+| Medium | Hook documentation conflated git-hooks.nix's installer with devenv's shell-entry task. | Distinguish the disabled installation script from the retained hook-shim installation task; shell entry skips lint/format tasks, not all hook mutations. |
 | Medium | No project license file was present in the inspected root tree. | Flag an owner decision; do not copy Workestrate's license or add a false badge. |
 | Medium | Workflow security/hygiene coverage differed from Workestrate. | Pinned zizmor, immutable-reference/hygiene checks, Fenix lock validation and regression tests. |
 | Low | Python test caches were not ignored; README was a long implementation narrative. | Ignore generated Python caches and organize the landing page around consumers/modules/verification. |

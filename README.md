@@ -123,10 +123,12 @@ Whole-flake/development-shell validation is separate and requires an explicit ro
 input. See [CI and releases](docs/ci-releases.md); never commit a temporary local
 root path in flake.lock.
 
-Hook installation is **disabled by default** by the base module. Installing hooks
-is a separate operation; generated store-path-bearing hook configuration is not
-source. Formatter policy lives in `share/tombi-format.toml`; ordinary checks reject
-drift from the shared policy.
+The base module disables git-hooks.nix's installation script by default, but the
+pinned devenv shell-entry task still installs its hook shim. Shell entry skips
+the lint and formatting tasks; it is not guaranteed to leave `.git/hooks` unchanged.
+Review hook installation separately from entering a shell, and do not commit
+generated store-path-bearing hook configuration. Formatter policy lives in
+`share/tombi-format.toml`; ordinary checks reject drift from the shared policy.
 
 ## Guest and service building blocks
 
