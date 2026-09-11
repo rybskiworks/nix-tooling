@@ -1,271 +1,159 @@
-# nix-tooling
+<h1 align="center">nix-tooling</h1>
+<p align="center"><strong>One reviewed toolchain. Many reproducible consumers.</strong></p>
+<p align="center">Shared Nix inputs, opt-in development modules, and explicit guest-building primitives.</p>
+<p align="center">
+  <a href="https://github.com/rybskiworks/nix-tooling/actions/workflows/ci.yml"><img alt="CI on main" src="https://github.com/rybskiworks/nix-tooling/actions/workflows/ci.yml/badge.svg?branch=main"></a>
+  &nbsp; Linux x86_64 &nbsp; | &nbsp; Nix flakes &nbsp; | &nbsp; Immutable inputs
+</p>
+<p align="center">
+  <a href="#consume-a-reviewed-snapshot">Use it</a> &middot;
+  <a href="#choose-only-what-you-need">Modules</a> &middot;
+  <a href="#verification-without-shell-side-effects">Verification</a> &middot;
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-Shared Nix dev tooling for the `rybskiworks` flakes: formatter, git-hooks, Tombi, Rust via fenix, and Beads.
+---
 
-This flake is designed as a **sibling** to `workestrate` (`path:../nix-tooling` locally, `github:rybskiworks/nix-tooling` when published) and exposes reusable `devenvModules` so consumers can opt-in without pulling in unwanted tooling.
+**Stop maintaining the same compiler and formatter pins in every repository.**
+`nix-tooling` owns a shared package set and Fenix toolchain, then exposes small,
+opt-in modules for consumers such as Workestrate and its runtime forks.
 
-## Architecture
+It is a supplier, not an operator environment. Importing a module should not
+initialize a tracker, install a host daemon, migrate credentials or start workloads.
 
+```text
+                    nix-tooling @ reviewed commit
+                     /           |             \
+              input authority  dev modules   guest primitives
+                     \           |             /
+                       consumer flakes follow
+                    Workestrate / runtime / tools
 ```
-nix-tooling/
-├── flake.nix                 # flake-parts + devenv + treefmt-nix + git-hooks + fenix
-├── packages/tombi.nix        # pinned Tombi (version: share/tombi-version; sha in packages/tombi.nix)
-├── devenvModules/
-│   ├── base.nix              # treefmt + typos + shell fundamentals
-│   ├── nix.nix               # nixfmt + statix (+ deadnix)
-│   ├── toml.nix              # Tombi handling (custom formatter + lint hook)
-│   ├── rust.nix              # fenix stable toolchain + rustfmt/clippy (hooks opt-in, mkDefault false)
-│   └── beads.nix             # pinned Beads CLI only; no database or hook initialization
-├── tombi.toml
-└── README.md
-```
 
-### Inputs and version pins
+## Choose only what you need
 
-| Input | Rev | Follows | Notes |
-|-------|-----|---------|-------|
-| `nixpkgs` | `a799d3e3886da994fa307f817a6bc705ae538eeb` (nixos-unstable) | — | Consumers share this package set with `nixpkgs.follows = "tooling/nixpkgs"`. |
-| `flake-parts` | `9d0d87172c374f89da73c1cfe6d81ae62feac1f1` | `nixpkgs` | |
-| `devenv` | `97135e80b6e432f41f84f72383e1b8147f33ef0c` | `nixpkgs`, `git-hooks`, `flake-parts` | |
-| `treefmt-nix` | `27b3b12a8e6375f28ebe122f07d230ca5459bbfa` | `nixpkgs` | No `programs.tombi` (128 programs checked). |
-| `git-hooks.nix` | `27555e2624241fb116b49095df4caaee85a25691` | `nixpkgs` | No `hooks.tombi`; `hooks.treefmt.settings.fail-on-change` defaults `true`. |
-| `fenix` | `fa09e6473a0dfd673e6cb9a37741aec513b4bb2a` (rustc 1.97.1) | `nixpkgs` (tooling) | **Owned pin** — consumer must NOT `follows`-override `tooling.inputs.fenix` so the toolchain stays reproducible. |
-| `beads` | `6c124203e771433a3550c348771a5b5e27fd3c21` (1.2.2) | `nixpkgs` | Upstream's embedded-capable Go package, built with the shared package set. |
-| `determinate` | `cb76ac22754f6b36c008a3c39477c174a146dd6b` (3.22.3) | Supplier locks preserved | Opt-in supported guest engine/Nixd; preserves upstream binary-cache identities. |
+| Surface | Purpose |
+| :--- | :--- |
+| `devenvModules.base` | Common shell tools and formatting integration. |
+| `devenvModules.nix` | Nix formatting and static checks. |
+| `devenvModules.toml` | Pinned Tombi and shared TOML policy. |
+| `devenvModules.rust` | Supplier-owned Fenix compiler and Rust formatting. |
+| `devenvModules.beads` | Pinned CLI, without tracker initialization or synchronization. |
+| `devenvModules.determinate` | Opt-in Nix client, without replacing the host daemon. |
+| `lib.guest` / `nixosModules` | Explicit guest construction and optional NixOS profiles. |
 
-*Follows discipline*: consumers follow the shared inputs owned here, including the curated Fenix revision. Remove inverse `tooling.inputs.nixpkgs.follows = "nixpkgs"` overrides when following `tooling/nixpkgs`, since combining both directions creates a cycle. When composing consumers, make their `tooling` inputs follow the root's `tooling` input.
+The exported system is **`x86_64-linux`**. Pinned binary packages currently
+constrain portability; adding a platform requires package and runtime evidence,
+not just extending the flake's `systems` list.
 
-### Tombi handling (why custom)
+## Consume a reviewed snapshot
 
-`treefmt-nix` and `git-hooks.nix` have no native Tombi support. We vendor a custom formatter:
+This example uses an immutable, already-landed snapshot. Advance it deliberately,
+then regenerate and review the consumer lockfile:
 
 ```nix
-treefmt.config.settings.formatter.tombi = {
-  command = "${tombi}/bin/tombi";
-  options = ["format"];
-  includes = ["*.toml"];
+inputs = {
+  tooling.url = "github:rybskiworks/nix-tooling/1120aa22cddf4a9a3424f38aadbebadd8a963c4b";
+  nixpkgs.follows = "tooling/nixpkgs";
+  fenix.follows = "tooling/fenix";
+  flake-parts.follows = "tooling/flake-parts";
+  devenv.follows = "tooling/devenv";
+  treefmt-nix.follows = "tooling/treefmt-nix";
+  git-hooks.follows = "tooling/git-hooks";
 };
 ```
 
-and a custom git hook:
+**One direction only.** Do not also make `tooling.inputs.nixpkgs` follow the
+consumer's nixpkgs; that reverses ownership and can create a cycle. When a consumer
+imports another consumer, make that dependency's tooling follow the root tooling
+input. Do not independently override the supplier's Fenix revision.
+
+For a flake-parts/devenv consumer, import only required modules and supply the
+pinned Fenix overlay to the package set:
 
 ```nix
-git-hooks.hooks.tombi-lint = {
-  enable = true;
-  entry = "${tombi}/bin/tombi lint --error-on-warnings";
-  files = "\\.toml$";
-  pass_filenames = false;
+_module.args.pkgs = import inputs.nixpkgs {
+  inherit system;
+  overlays = [ inputs.fenix.overlays.default ];
 };
-```
-
-Formatting is driven by `treefmt` (so `nix fmt` formats `*.toml` via `tombi format` alongside `*.nix`/`*.rs`). Lint is a separate hook.
-
-**Auto-fix on commit**: `git-hooks.hooks.treefmt.settings.fail-on-change`:
-
-- `false` → `git commit` auto-formats staged files (including `*.toml` via Tombi) and succeeds. This is the `devenvModules/toml.nix` default (developer-friendly).
-- `true` (default for `git-hooks.nix`) → commit fails when formatting is needed; run `nix fmt` manually. This is the `perSystem.pre-commit` (CI) setting in `nix-tooling`'s own `nix flake check`.
-
-Override per repo:
-
-```nix
-git-hooks.hooks.treefmt.settings.fail-on-change = lib.mkForce true;  # CI fail-closed
-```
-
-### Canonical rules, drift gate, and PATH-safe wrapper
-
-- **Canonical source**: `share/tombi-format.toml` owns the single source of truth for `toml-version` + `[format.rules]` (`indent-width = 2`, `line-width = 100`) and `[lint.rules]` (`dotted-keys-out-of-order = "warn"`, `tables-out-of-order = "warn"`). Header: `canonical format/lint rules — vendored into per-repo tombi.toml; drift checked by scripts/check-tombi-sync.sh`.
-- **Per-repo `tombi.toml`**: vendored copy of the canonical block plus per-repo `[files]` `include`/`exclude` and `[[schemas]]`/`[schema]` scoping. Do not edit the vendored block directly — edit `share/tombi-format.toml` and re-vendor.
-- **Drift gate**: `scripts/check-tombi-sync.sh` extracts and compares normalized `toml-version` + `[format.rules]` + `[lint.rules]` (sorted, whitespace-normalized, ignoring section order and `[files]`/`[[schemas]]`) against `share/tombi-format.toml`. Fails with `diff -u` on drift.
-  ```sh
-  ./scripts/check-tombi-sync.sh ./tombi.toml
-  ./scripts/check-tombi-sync.sh ./tombi.toml ../workestrate/tombi.toml
-  # from workestrate repo root:
-  # ../nix-tooling/scripts/check-tombi-sync.sh ./tombi.toml
-  ```
-- **PATH-safe wrapper**: `packages/tombi.nix` installs the real binary as `$out/bin/.tombi-wrapped` and a wrapper at `$out/bin/tombi` that walks up from `$PWD` to `git rev-parse --show-toplevel` (fallback `/`) looking for `tombi.toml`, `.tombi.toml`, `tombi/config.toml`, or `pyproject.toml` containing `[tool.tombi]`. If found, `exec`s the wrapped binary with `TOMBI_OFFLINE="${TOMBI_OFFLINE:-true}"`; if not, exits 1 with `tombi: no tombi.toml in scope (walked up to <root>) — use 'nix fmt'/'treefmt' or add tombi.toml; this repo may use its own formatter (e.g. taplo)`.
-
-## Usage
-
-For explicit, runtime-neutral image assembly and an optional NixOS-derived
-configuration, see [Shared guest images](docs/guest-images.md). The guest library
-does not change the default tooling package or choose a Nix engine/daemon.
-The separate [supported Determinate guest profile](docs/determinate-guests.md)
-selects the official engine and Nixd only when imported; its NixOS VM test is
-explicitly opt-in and does not run with ordinary tooling checks.
-The [external Beads SQL server contract](docs/beads-server.md) provides a
-pinned `dolt-bin` package and a separately selected native compatibility test;
-ordinary checks never start a SQL server or initialize a tracker.
-
-Add as a flake input:
-
-```nix
-{
-  inputs.tooling.url = "path:../nix-tooling"; # locally
-  # inputs.tooling.url = "github:rybskiworks/nix-tooling"; # after publish
-  inputs.nixpkgs.follows = "tooling/nixpkgs";
-  inputs.fenix.follows = "tooling/fenix";
-  inputs.flake-parts.follows = "tooling/flake-parts";
-  inputs.devenv.follows = "tooling/devenv";
-  inputs.treefmt-nix.follows = "tooling/treefmt-nix";
-  inputs.git-hooks.follows = "tooling/git-hooks";
-}
-```
-
-Consume in a flake-parts + devenv flake:
-
-```nix
-outputs = inputs@{ flake-parts, ... }: flake-parts.lib.mkFlake { inherit inputs; } {
-  imports = [ inputs.devenv.flakeModule ];
-  systems = [ "x86_64-linux" ];
-  perSystem = { system, ... }: {
-    _module.args.pkgs = import inputs.nixpkgs {
-      inherit system;
-      overlays = [ inputs.fenix.overlays.default ];
-    };
-    devenv.shells.default.imports = [
-      inputs.tooling.devenvModules.base
-      inputs.tooling.devenvModules.nix
-      inputs.tooling.devenvModules.toml
-      inputs.tooling.devenvModules.rust
-    ];
-  };
-}
-```
-
-Standalone: `nix-tooling` dogfoods its own modules via `devenv.shells.default` — see `flake.nix` `perSystem.devenv.shells.default`.
-
-### Determinate Nix in development shells
-
-Import `inputs.tooling.devenvModules.determinate` to put the same pinned
-Determinate client as the guest base on the shell's `PATH`. The module adds
-only `packages.${system}.determinate-nix`: it does not install or restart a
-daemon, change Nix settings, select a store, initialize state or run an
-installer at shell entry. The tooling repository uses this module itself.
-It explicitly selects the executable output with `lib.getBin`, avoiding the
-separate Nix C++ development output that an unqualified shell input can select.
-
-```nix
 devenv.shells.default.imports = [
-  inputs.tooling.devenvModules.determinate
   inputs.tooling.devenvModules.base
   inputs.tooling.devenvModules.nix
+  inputs.tooling.devenvModules.toml
+  inputs.tooling.devenvModules.rust
 ];
 ```
 
-Remove separately listed `pkgs.nix` from consumer shells to avoid competing
-clients on `PATH`. For executable wrappers, select
-`inputs.tooling.packages.${system}.determinate-nix` explicitly. This does not
-replace devenv's own internally pinned evaluation implementation or rewrite
-supplier inputs. The formatter-only `devenvModules.nix` remains unchanged.
-Verify the actual selected executable with `command -v nix` and `nix --version`
-inside the entered shell; a client package check is not a daemon handshake.
+Rust builders and standalone formatters must use the same Fenix compiler/rustfmt.
+The [Rust module](devenvModules/rust.nix) requires the expected overlay; Rust commit
+hooks remain opt-in. A sibling checkout is useful with an explicit local input
+override, but must not become a machine-local path or mutable ref in a published
+consumer lockfile.
 
-Host daemon migration and guest daemon activation remain separate operations;
-the shared NixOS guest profile supplies the supported matched client/Nixd pair.
+## Verification without shell side effects
 
-### Beads task tracking
-
-Use the pinned CLI without entering a development shell:
+Run offline contracts first:
 
 ```sh
-nix run .#beads -- version
-nix run .#beads -- --help
+python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+python3 scripts/ci/toolchain.py check --role supplier
+python3 scripts/ci/check_repository.py
 ```
 
-Consumers can add `inputs.tooling.packages.${system}.beads` to their packages or
-opt into `inputs.tooling.devenvModules.beads`. The module only adds the CLI to
-`PATH`: it does not initialize a database, install hooks, edit repository
-instructions, start a server, or synchronize a remote.
-
-The pin follows the [tested 1.2.2 release](https://github.com/gastownhall/beads/releases/tag/v1.2.2),
-not the retracted 1.2.0/1.2.1 releases. Upstream's flake builds the embedded Dolt
-engine into the CLI; using this package does not require a separate Dolt server.
-
-Installing a CLI and upgrading an existing tracker are separate operations.
-Before opening an older tracker, stop its writers and preserve its full `.beads`
-directory, including ignored database files. Rehearse upgrades on a disposable
-copy and compare issue exports before changing the original. JSONL exports are
-useful for comparison but do not preserve full Dolt history. In 1.2.2 even a
-read-only command can run version-upgrade initialization before opening its
-read-only store; `version` and `--help` do not open the database.
-
-Keep database synchronization and migration explicit. Do not run `bd init`,
-`bd setup`, `bd hooks install`, `bd bootstrap`, or `bd dolt push` from shell entry
-hooks. Hook installation must be reviewed separately to preserve repository
-validation gates and commit-message policy.
-
-The Rust module requires the pinned Fenix overlay and fails evaluation if it is absent. Build Rust packages with `pkgs.makeRustPlatform` using the same `pkgs.fenix.stable.cargo` and `pkgs.fenix.stable.rustc`. Consumers that expose a separate flake formatter should also select `pkgs.fenix.stable.rustfmt` in their `treefmt.config.programs.rustfmt.package`; enabling rustfmt alone selects nixpkgs' formatter. Static-musl packages need their target standard library and linker configured explicitly when sharing this compiler.
-
-An application-independent bootstrap shell still needs devenv's task runner under the flakes integration. The pinned devenv task package deliberately uses its own locked nixpkgs and Rust toolchain to preserve upstream binary-cache compatibility. A source build can therefore fetch another compiler, Rust documentation, and native build tools even though the development shell uses the shared Fenix compiler. Bootstrap removes application build dependencies; it does not guarantee a small initial tooling download.
-
-The [pinned devenv cache configuration](https://github.com/cachix/devenv/blob/97135e80b6e432f41f84f72383e1b8147f33ef0c/flake.nix) provides the official cache and signing key. They can be supplied for a single shell invocation without changing host configuration:
+With Nix available, evaluate or build **ordinary checks only**:
 
 ```sh
-./scripts/devenv-shell.sh \
-  --extra-substituters https://devenv.cachix.org \
-  --extra-trusted-public-keys 'devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw='
+python3 scripts/ci/run_checks.py evaluate
+python3 scripts/ci/run_checks.py full
 ```
 
-> `rust.nix` hooks are **opt-in** (`git-hooks.hooks.rustfmt/clippy` default `false` via `lib.mkDefault`); consumers that want pre-commit rustfmt/clippy must enable them explicitly (e.g. `git-hooks.hooks.rustfmt.enable = true; git-hooks.hooks.clippy.enable = true;`). `treefmt.config.programs.rustfmt` remains enabled (formatter).
+The runner enumerates `checks.x86_64-linux`, validates derivation outputs and builds
+that exact set. It does not evaluate the interactive shell, install hooks, rewrite
+the lockfile or run optional KVM tests. This avoids the documented development-root
+requirement that made the previous bare whole-flake CI invocation inconsistent
+with local development. It is not a claim that every output was validated.
 
-## Checks
-
-- `nix fmt` → treefmt wrapper (nixfmt, statix, rustfmt, tombi)
-- The [full check recipe](#development) validates all outputs and runs the ten ordinary checks: formatting, hooks, Tombi, Beads, the guest contracts, and the pure SQL-service contract. Tombi sync rejects drift from `share/tombi-format.toml`.
-- `nix build .#checks.x86_64-linux.beads-version` → verifies the pinned CLI version and help without creating a tracker
-- `nix build .#checks.x86_64-linux.beads-embedded` → creates, exports, and queries one issue in disposable embedded storage without installing hooks or repository instructions
-- `./scripts/devenv-shell.sh` → devenv shell with all tooling (bare `nix develop` no longer evaluates: pure eval cannot resolve devenv.root without the `devenv-root` input override)
-
-Whole-flake validation also evaluates the development shell, so bare
-`nix flake check` needs the explicit root input shown below. The repository's
-unused automatic shell/process container outputs are disabled; shared modules
-retain consumers' container capability. Disabling those outputs does not remove
-the development shell's explicit-root requirement. Checking does not enter the
-shell or run its hooks, and the optional NixOS VM test is not an ordinary check.
-
-The experimental [NixOS OCI image interface](docs/nixos-oci-images.md) exports
-one Determinate base and additive registered leaves. Its ordinary contract
-check does not build images; actual Microsandbox activation and shutdown remain
-separate required gates.
-
-## Git hooks
-
-In-shell enforcement comes from the `devenvModules` (`git-hooks.hooks.*` install
-on shell entry with the pinned toolchain). For commits outside a devshell
-(bare host, container without nix, agents that never load `.envrc`),
-`.git/hooks/pre-commit` and `.git/hooks/pre-push` are pure-sh fallbacks
-(canonical copies: `scripts/git-hooks/pre-commit.sh` and
-`scripts/git-hooks/pre-push.sh`; reinstall with
-`cp scripts/git-hooks/pre-commit.sh .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit`
-and `cp scripts/git-hooks/pre-push.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push`):
-secret-material greps always run, tier-1 linters (typos/nixfmt/statix/deadnix)
-and tombi gates skip with a message when the tool is absent or
-version-mismatched, staged `.rs` files get `rustfmt --check` at the crate's
-edition when rustfmt is on PATH, pre-push runs `just check` when
-just+nix+check-recipe are present (skip-with-message otherwise), and `prek`
-delegation happens only when both the binary and a repo-root
-`.pre-commit-config.yaml` exist. Plain `git commit`
-never needs `--no-verify`. The generated `.pre-commit-config.yaml` is
-gitignored and never committed (a copy referencing `/nix/store` paths dangles
-after GC).
-
-Canonical note: see workestrate `docs/nix/store-hygiene-and-gc.md`
-§"Git hooks vs GC" — the devenv-shell clobber of these shims is disabled by
-default (`git-hooks.install.enable = lib.mkDefault false` in
-`devenvModules/base.nix`); if a consumer re-enables installation, re-run the
-`cp` commands above after shell entry.
-
-## Development
+For an interactive shell, use the explicit-root wrapper:
 
 ```sh
-export PATH="/nix/store/<hash>-nix-<version>/bin:$PATH" # only needed when nix is not already on PATH
-nix flake lock
-tooling_root_file="$(mktemp)"
-trap 'rm -f "$tooling_root_file"' EXIT
-printf '%s' "$PWD" > "$tooling_root_file"
-nix flake check --no-update-lock-file \
-  --option allow-import-from-derivation false --max-jobs 1 --cores 2 \
-  --override-input devenv-root "file+file://$tooling_root_file"
-nix fmt
-./scripts/devenv-shell.sh -c tombi --version
+./scripts/devenv-shell.sh
 ```
+
+Whole-flake/development-shell validation is separate and requires an explicit root
+input. See [CI and releases](docs/ci-releases.md); never commit a temporary local
+root path in flake.lock.
+
+The base module disables git-hooks.nix's installation script by default, but the
+pinned devenv shell-entry task still installs its hook shim. Shell entry skips
+the lint and formatting tasks; it is not guaranteed to leave `.git/hooks` unchanged.
+Review hook installation separately from entering a shell, and do not commit
+generated store-path-bearing hook configuration. Formatter policy lives in
+`share/tombi-format.toml`; ordinary checks reject drift from the shared policy.
+
+## Guest and service building blocks
+
+Guest assembly, boot, daemon activation and protocol compatibility are separate
+contracts. Optional packages do not implicitly become ordinary CI gates.
+
+| Guide | Boundary |
+| :--- | :--- |
+| [Guest images](docs/guest-images.md) | Runtime-neutral construction primitives. |
+| [Determinate guests](docs/determinate-guests.md) | Explicit client/Nixd profile and optional VM tests. |
+| [NixOS OCI images](docs/nixos-oci-images.md) | Base/leaf assembly, registration and activation limits. |
+| [Beads SQL service](docs/beads-server.md) | External server configuration and native compatibility evidence. |
+
+Installing Beads is not tracker migration. Before changing an existing tracker,
+stop writers, back up its complete state and rehearse on a disposable copy. Do not
+initialize or synchronize databases from shell-entry hooks.
+
+## Maintenance
+
+`main` is the integration branch. Input ownership stays here; consumer pins advance
+through reviewed PRs. [`version.txt`](version.txt) is source-version metadata, not
+proof that a release exists or all runtime tests passed.
+
+Read [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md),
+[GitHub governance](docs/github-governance.md) and the
+[repository audit](docs/repository-audit-2026-09-11.md). The audit records the
+outstanding project-license decision rather than assuming a license on the owner's
+behalf.

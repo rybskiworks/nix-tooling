@@ -1,42 +1,104 @@
 # CI, tooling versions and downstream promotion
 
-This foundation leaves all current flake inputs, owned toolchain pins, modules, packages and existing tests unchanged. `version.txt` introduces an unpublished source-contract version, not a declaration that a Git tag or GitHub Release already exists.
+`main` is the integration branch. version.txt is source-contract metadata, not proof
+that a release exists. Dependency pins, packages and runtime state are unchanged.
 
 ## CI tiers
 
-Every PR runs metadata tests and workflow lint, plus pinned Nix evaluation through the reviewed reusable organization workflow. The normal evaluation tier uses `nix flake check --no-build --no-update-lock-file`: it is not a claim that packages or guest runtimes were built and tested.
+Every main-targeting PR runs offline policy/metadata tests, supplier-lock checks,
+actionlint, zizmor and ordinary-check evaluation. Source-changing PRs and
+unknown/empty diffs select compiled ordinary checks; only known narrative-only
+PRs may skip compilation. Main pushes, merge groups, manual dispatch and the nix-ci
+label also select it. Hosted builds are bounded to two build jobs/two cores and a
+120-minute compiled-check timeout.
 
-Adding `nix-ci`, or manually dispatching the workflow, selects full flake checks. Selected full checks participate in `CI / required`; failed, cancelled or unexpectedly skipped checks fail closed. Expensive checks are not made mandatory on every PR before hosted-runner resource requirements and caching have been established. Only add an administrative required-check rule after real runs establish the exact check context and emitting App.
-
-The shared implementation is pinned to `3a7ef7dd7d23aedba866cb3a3a5df26ff2f86a7c` in the organization foundation PR. Review that code before adopting it. No multi-repository token, publisher credential or private consumer checkout occurs in this public CI. Ordinary evaluation may still realize import-from-derivation dependencies; do not describe it as universally zero-build or free.
+`CI / required` retains a tested explicit dependency contract: policy/evaluation
+must succeed and compilation may skip only if explicitly not selected. Failed,
+cancelled, missing and unexpectedly skipped jobs fail closed. Merge-group support
+does not enable a merge queue.
 
 ```sh
 python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
 python3 scripts/ci/contract.py metadata
-nix flake check --no-build --no-update-lock-file
-nix flake check --keep-going --print-build-logs --no-update-lock-file
+python3 scripts/ci/toolchain.py check --role supplier
+python3 scripts/ci/check_repository.py
+python3 scripts/ci/run_checks.py evaluate
+python3 scripts/ci/run_checks.py full
 ```
 
-The agent draft-PR caller remains off unless `RYBSKIWORKS_AGENT_PRS=true` is deliberately configured after protections are tested. It never approves or merges PRs.
+The runner enumerates checks.x86_64-linux and evaluates derivation paths, then
+builds exactly that set for full. It rejects empty/malformed output, disables
+import-from-derivation, forbids lock updates and checks lockfile cleanliness.
+Subprocess argument arrays avoid executable shell interpolation from check names.
 
-## SemVer contract
+**This is not whole-flake validation.** It does not evaluate the interactive shell
+or optional package/VM outputs. Evaluation/fetching still have costs and are not
+promised network-free. Optional native/KVM/image activation tests remain separate.
 
-`version.txt` is the authority for this repository's tooling contract. Version the documented exported attributes, NixOS/devenv options and defaults, helper semantics, supported platform/toolchain behavior, and observable runtime/image contracts. Do not blindly classify every pin bump as a patch. Preserve the owned Fenix revision and current downstream follows graph.
+The former shared organization workflow invoked bare whole-flake checks, conflicting
+with this repository's documented devenv-root requirement. Selecting ordinary checks
+repairs this repository without changing the contract for every other shared-workflow
+consumer. A future reusable interface should accept a reviewed check selection, not
+arbitrary executable commands.
 
-Initially, fixes are patch changes, compatible additions are minor, and breaking 0.x changes require a documented minor bump with migration notes. Declaring 1.0 requires an explicit compatibility commitment. Never update a consumer's NixOS stateVersion as a routine tooling upgrade.
+## Separate whole-flake/development-shell validation
 
-Release Please's root simple/version.txt strategy is a candidate for release-PR calculation. Before enabling its caller, inventory tags as well as releases and validate the first-release baseline, all-file change accounting, changelog and manifest consistency. No release calculator is enabled by this PR and no source version is treated as already published.
+Use `./scripts/devenv-shell.sh` for interactive work. For whole-flake validation in
+a disposable checkout, provide the explicit root:
+
+```sh
+root_file="$(mktemp)"
+trap 'rm -f "$root_file"' EXIT
+printf '%s' "$PWD" > "$root_file"
+nix flake check --no-write-lock-file \
+  --option allow-import-from-derivation false --max-jobs 1 --cores 2 \
+  --override-input devenv-root "file+file://$root_file"
+git diff --exit-code HEAD -- flake.lock
+```
+
+The override changes an evaluation input without writing it to the lock. Do not
+claim an unchanged input graph or commit that temporary path. Strict locked CI does
+not need the override. Hook installation, tracker initialization, daemon migration
+and guest activation remain independent operations.
+
+## SemVer and compatibility
+
+Version documented public attributes, NixOS/devenv options/defaults, helper semantics,
+platform/toolchain behavior and observable image contracts. Do not classify every
+pin bump as a patch. In 0.x, breaking public changes require a documented minor bump
+and migration notes; 1.0 needs an explicit compatibility commitment. Never bump a
+consumer's NixOS stateVersion as a routine tooling upgrade.
+
+A root version.txt release-PR strategy is a candidate, not an enabled publisher.
+Inventory tags/releases, define the initial baseline and complete-repository change
+accounting, and validate changelog consistency before adding a release calculator.
+Generated release-note categories do not advance source versions.
 
 ## Promotion to Workestrate
 
-Workestrate already consumes a specific tooling revision and follows the shared inputs. Keep that pin unchanged until a real tested tooling release is available. Its engineering integration base is `migration/tool-model`, not legacy main.
+Workestrate is public at this audit baseline and its integration target is now main
+following PR #32. Keep consumers on a reviewed immutable tooling revision until
+supplier and downstream evidence supports promotion. Advance the intended input/lock
+subgraph in a separate PR; resolve releases to exact commits, not mutable refs.
 
-A private-side compatibility coordinator should test the exact tooling candidate against an exact Workestrate revision and return only sanitized evidence. Never pass a token able to read private Workestrate into public nix-tooling PR jobs. Missing downstream evidence blocks release promotion.
+A compatibility coordinator should test exact supplier/consumer revisions and report
+sanitized results. Public consumer tests do not need a private-repository token.
+Any future private tests belong in a suitably private/trusted context, never with
+broad credentials exposed to public PR code. Missing required downstream evidence
+blocks promotion even when the supplier's own ordinary checks pass.
 
-After publication, propose an upgrade PR to Workestrate's configured integration branch, preserving follows and changing only the intended input/lock subgraph. Resolve a release to its immutable commit; a raw commit pin with recorded release metadata remains valid. The downstream PR must run its own CI before human merge.
+## Publication and administration
 
-## Publication is a separate boundary
+Keep build/test jobs secretless. A separate narrow publisher verifies the approved
+source SHA and same-SHA evidence, attaches complete checksummed assets, SBOM/provenance
+and input revisions to a draft, and publishes after verification. Enable immutable
+release/tag controls deliberately; editable release text is not a provenance artifact.
 
-A publisher must verify a human-approved source SHA and same-SHA full check evidence, build/test without publishing credentials, attach complete checksummed artifacts and provenance to a draft, and publish only after inventory verification. Enable GitHub immutable releases administratively before trusting tag/asset permanence. The title and release notes remain editable; attach critical metadata as a verified artifact.
+The agent draft-PR caller remains opt-in and never approves/merges. This change adds
+no publishing key, private coordinator, cache deployment, native KVM worker or auto-merge.
+Use [governance](github-governance.md) for staged host-side settings and review prerequisites.
 
-This PR does not provide the private coordinator, release calculator bootstrap, publisher, native KVM runner, binary cache deployment or automatic merge policy. Their acceptance criteria and ordered rollout are in the [organization plan](https://github.com/rybskiworks/.github/blob/agents/chatgpt/governance-foundation-20260911/docs/governance.md).
+The same small bootstrap verifier is present in both repositories so neither executes
+mutable remote code or consumes the companion unmerged PR. It owns no compiler-version
+pin. After tested promotion, a versioned supplier verification interface can remove
+the copy; do not fetch scripts from main just to deduplicate them.

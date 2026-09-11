@@ -1,49 +1,82 @@
 name: Nix tooling CI
 on:
   pull_request:
+    branches: [main]
     types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
   push:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: nix-tooling-ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   policy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Policy and workflow checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     outputs:
       full: ${{ steps.select.outputs.full }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
       - run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
       - run: python3 scripts/ci/contract.py metadata
+      - run: python3 scripts/ci/toolchain.py check --role supplier
+      - run: python3 scripts/ci/check_repository.py
       - id: select
         run: python3 scripts/ci/contract.py select
       - uses: taiki-e/install-action@d438492cf8a250514fa2d34b30bc3c0dc37c65ff # v2.87.8
         with:
-          tool: actionlint@1.7.7
+          tool: actionlint@1.7.7, zizmor@1.30.0
       - run: actionlint
+      - run: zizmor --format github .github/workflows/
   nix-eval:
-    uses: rybskiworks/.github/.github/workflows/reusable-nix-check.yml@3a7ef7dd7d23aedba866cb3a3a5df26ff2f86a7c
-    with:
-      tier: evaluate
-  nix-full:
+    name: Evaluate ordinary Nix checks
     needs: policy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.8/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 2
+            cores = 2
+      - run: python3 scripts/ci/run_checks.py evaluate
+  nix-full:
+    name: Build ordinary Nix checks
+    needs: [policy, nix-eval]
     if: needs.policy.outputs.full == 'true'
-    uses: rybskiworks/.github/.github/workflows/reusable-nix-check.yml@3a7ef7dd7d23aedba866cb3a3a5df26ff2f86a7c
-    with:
-      tier: full
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.34.8/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            max-jobs = 2
+            cores = 2
+      - run: python3 scripts/ci/run_checks.py full
   required:
     name: CI / required
     needs: [policy, nix-eval, nix-full]
     if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
