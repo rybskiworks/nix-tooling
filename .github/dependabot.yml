@@ -1,3 +1,4 @@
+# Source, compiler and runtime pins are reviewed together, not advanced independently.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -6,5 +7,6 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     groups:
-      actions:
-        patterns: ["*"]
+      compatible-actions:
+        patterns: ['*']
+        update-types: [minor, patch]

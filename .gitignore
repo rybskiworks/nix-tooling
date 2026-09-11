@@ -22,3 +22,12 @@ target/
 
 # OS
 .DS_Store
+
+# Offline Python contracts and local scratch state
+__pycache__/
+*.pyc
+/.tmp/
+/.env
+/.env.local
+/NEXT-SESSION*.md
+/STATUS.md
