@@ -17,8 +17,10 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "support"))
 from children import ChildSupervisor
-from smoke_contract import (HEX, QA_GID, QA_NAME, QA_UID, decode, denied_client, isolated_environment,
-                            qa_identity, require, retryable_denial_transport, validate_inspect, validate_spec, verdict)
+from smoke_contract import (HEX, QA_GID, QA_NAME, QA_UID, daemon_query, decode, denied_client,
+                            engine_kind, inspect_runtime_contract, isolated_environment, qa_identity, readiness_script, require,
+                            retryable_denial_transport, validate_daemon_service, validate_inspect,
+                            validate_mode, validate_spec, validate_stop, verdict)
 
 
 GIB = 1024**3
@@ -28,8 +30,15 @@ SCRATCH_LIMIT = 4 * GIB
 GROWTH_LIMIT = 4 * GIB
 
 
-def resource_admission(free, memory):
-    require(free >= DISK_ADMISSION, "admission requires 22 GiB")
+def resource_policy(engine="determinate"):
+    require(engine in {"determinate", "lix"}, "unsupported engine resource policy")
+    return {"disk_admission_bytes": 25 * GIB if engine == "lix" else DISK_ADMISSION,
+            "disk_floor_bytes": 20 * GIB if engine == "lix" else DISK_FLOOR,
+            "memory_floor_bytes": (8 if engine == "lix" else 6) * GIB}
+
+
+def resource_admission(free, memory, *, engine="determinate"):
+    require(free >= resource_policy(engine)["disk_admission_bytes"], "disk admission")
     require(memory >= 8 * GIB, "admission requires 8 GiB available host memory")
 
 
@@ -69,17 +78,20 @@ class Fixture:
     def __init__(self, args):
         self.args = args
         self.spec = validate_spec(decode(args.spec.read_text()))
+        validate_mode(self.spec, args.mode)
         self.msb = args.msb.resolve(strict=True)
         require(str(self.msb).startswith("/nix/store/") and self.msb.name == "msb", "runtime must be an installed store binary")
         for value in (args.msb_sha256, args.agentd_sha256, args.archive_sha256):
             require(HEX.fullmatch(value), "invalid expected hash")
         require(re.fullmatch(r"[0-9a-f]{40}", args.runtime_revision), "invalid runtime revision")
+        require(re.fullmatch(r"msb [0-9]+\.[0-9]+\.[0-9]+", args.runtime_version), "invalid runtime version")
+        inspect_contract = inspect_runtime_contract(self.spec, args.runtime_revision, args.runtime_version)
         self.agentd = self.msb.parent.parent / "libexec/agentd"
         require(digest(self.msb) == args.msb_sha256, "runtime hash mismatch")
         require(digest(self.agentd) == args.agentd_sha256, "agentd hash mismatch")
         require(digest(Path(self.spec["archive"])) == args.archive_sha256, "archive hash mismatch")
         admitted_free = shutil.disk_usage(args.scratch).free
-        resource_admission(admitted_free, available_memory())
+        resource_admission(admitted_free, available_memory(), engine=engine_kind(self.spec))
         require(os.access("/dev/kvm", os.R_OK | os.W_OK), "KVM unavailable")
         self.root = Path(tempfile.mkdtemp(prefix="ng.", dir=args.scratch)).resolve()
         self.root.chmod(0o700)
@@ -97,18 +109,22 @@ class Fixture:
         self.supervisor = ChildSupervisor()
         self.sequence = 0
         self.attempted = False
+        self.launch_generation = 0
+        self.normal_stop_witness = None
         self.logs = []
         self.report = {
             "version": 1, "status": "running", "mode": args.mode, "root": str(self.root),
             "runtime_revision_asserted_by_caller": args.runtime_revision,
+            "runtime_version_expected": args.runtime_version, "engine_kind": engine_kind(self.spec),
+            "inspect_runtime_contract": inspect_contract,
             "msb": str(self.msb), "msb_sha256": args.msb_sha256,
             "agentd": str(self.agentd), "agentd_sha256": args.agentd_sha256,
             "archive": self.spec["archive"], "archive_sha256": args.archive_sha256,
             "stages": [], "stops": [], "full_acceptance": False,
             "initial_free_bytes": self.initial_free,
-            "limits": {"disk_admission_bytes": DISK_ADMISSION, "disk_floor_bytes": DISK_FLOOR,
+            "limits": {**resource_policy(engine_kind(self.spec)),
                        "scratch_bytes": SCRATCH_LIMIT, "global_growth_bytes": GROWTH_LIMIT,
-                       "memory_admission_bytes": 8 * GIB, "memory_floor_bytes": 6 * GIB,
+                       "memory_admission_bytes": 8 * GIB,
                        "work_seconds": 300, "cleanup_seconds": 90},
         }
 
@@ -120,10 +136,11 @@ class Fixture:
         self.report["minimum_free_bytes"] = min(free, self.report.get("minimum_free_bytes", free))
         self.report["maximum_sampled_global_growth_bytes"] = max(
             growth, self.report.get("maximum_sampled_global_growth_bytes", 0))
-        require(free >= DISK_FLOOR, "17 GiB disk floor")
+        policy = resource_policy(self.report.get("engine_kind", "determinate"))
+        require(free >= policy["disk_floor_bytes"], "disk floor")
         require(growth <= GROWTH_LIMIT, "4 GiB global disk growth limit")
         memory = available_memory()
-        require(memory >= 6 * GIB, "6 GiB available host memory floor")
+        require(memory >= policy["memory_floor_bytes"], "available host memory floor")
         self.report["minimum_memory_available_bytes"] = min(memory, self.report.get("minimum_memory_available_bytes", memory))
         # Imported root files can be numerous. Check cheap limits frequently,
         # but walk only the owned tree every five seconds and bound the walk.
@@ -148,6 +165,10 @@ class Fixture:
         require(sum(sizes) <= 16 * 1024**2, "total log quota")
 
     def command(self, arguments, *, timeout=20, stdin=None, check=True, cleanup_deadline=None):
+        if arguments[0] in {"create", "start"}:
+            # Even an unsuccessful new launch attempt invalidates old evidence.
+            self.launch_generation += 1
+            self.normal_stop_witness = None
         self.sequence += 1
         prefix = self.root / "logs" / f"{self.sequence:03d}-{arguments[0]}"
         out, err = prefix.with_suffix(".stdout"), prefix.with_suffix(".stderr")
@@ -232,6 +253,26 @@ class Fixture:
         return self.command(["logs", self.name, "--source", "all", "--json"], check=True,
                             timeout=5, cleanup_deadline=cleanup_deadline)[1]
 
+    def record_normal_stop(self, record):
+        validate_stop(record)
+        require(record is self.report["stops"][-1], "normal-stop record is not current")
+        require(type(record.get("runtime_pid")) is int and record["runtime_pid"] > 0,
+                "normal-stop runtime identity missing")
+        require(not self.supervisor.snapshot(), "owned process survived normal stop")
+        self.normal_stop_witness = (self.launch_generation, record, record["runtime_pid"])
+
+    def has_current_normal_stop(self):
+        witness = getattr(self, "normal_stop_witness", None)
+        if witness is None:
+            return False
+        generation, record, pid = witness
+        if (generation != self.launch_generation or not self.report["stops"]
+                or record is not self.report["stops"][-1] or record.get("runtime_pid") != pid):
+            return False
+        validate_stop(record)
+        # Fresh native-child supervision, never a terminal status or a PID lookup.
+        return not self.supervisor.snapshot()
+
     def boot_diagnostics(self):
         """Retain failed-unit evidence; selected readiness is not all-unit health."""
         systemd = self.spec["systemd"]
@@ -306,19 +347,22 @@ class Fixture:
 
     def check_daemon_trust(self):
         for user, field in ((None, "root_trusted"), (f"{QA_UID}:{QA_GID}", "qa_trusted")):
-            info = self.guest_json(self.spec["engine"] + "/bin/nix store info --store daemon --json", user=user)
+            info = self.guest_json(daemon_query(self.spec), user=user)
             require(type(info.get("trusted")) is bool, "missing actual daemon trust value")
             self.report[field] = info["trusted"]
         require(self.report["root_trusted"] and not self.report["qa_trusted"], "daemon trust boundary")
         service = self.execute(self.spec["systemd"] + "/bin/systemctl show nix-daemon.service --property ExecStart --value\n")[1]
-        require(self.spec["nixd"] + "/bin/determinate-nixd" in service and self.spec["engine"] + "/bin" in service,
-                "wrong daemon pair")
+        self.report.setdefault("daemon_services", []).append(service)
+        validate_daemon_service(self.spec, service)
+        if engine_kind(self.spec) == "lix":
+            core = self.spec["coreutils"] + "/bin/"
+            self.execute(f"test \"$({core}readlink -f /etc/systemd/system/nix-daemon@.service)\" = /dev/null\n")
 
     def check_nobody_denial(self):
         attempts = []
         self.report.setdefault("nobody_attempts", []).append(attempts)
         self.report["nobody_denied"] = False
-        command = self.spec["engine"] + "/bin/nix store info --store daemon --json\n"
+        command = daemon_query(self.spec) + "\n"
         try:
             for _ in range(3):
                 attempt = {}
@@ -371,7 +415,7 @@ class Fixture:
 test "$({c}readlink -f /proc/1/exe)" = {shlex.quote(spec['systemd'] + '/lib/systemd/systemd')}
 test "$({c}readlink -f /run/current-system)" = {shlex.quote(spec['toplevel'])}
 test "$({u}findmnt --noheadings --output FSTYPE --mountpoint /run)" = tmpfs
-{systemctl} is-active --quiet guest-store-registration.service nix-daemon.socket determinate-nixd.socket
+{readiness_script(spec)}
 test -f /etc/hosts && test -f /etc/hostname && test -f /etc/resolv.conf
 test -f /etc/ssl/certs/ca-certificates.crt && test ! -L /etc/ssl/certs/ca-certificates.crt
 test -f /nix/var/nix/db/db.sqlite
@@ -387,7 +431,7 @@ printf 'ACTIVATED:{self.nonce}\\n'
             time.sleep(0.25)
         self.boot_diagnostics()
         record = decode(self.command(["inspect", self.name, "--format", "json"])[1])
-        validate_inspect(record, self.name, self.image)
+        validate_inspect(record, self.name, self.image, runtime_revision=self.report.get("inspect_runtime_contract", "legacy"))
         self.report["inspect"] = record
         self.report["activation"] = True
         require(len(self.runtime_pids()) == 1, "expected one owned VMM process")
@@ -406,6 +450,11 @@ printf 'ACTIVATED:{self.nonce}\\n'
         self.setup_qa_user()
         # Preserve successful positive controls independently of the negative.
         self.check_daemon_trust()
+        if engine_kind(spec) == "lix":
+            # The Lix subdaemon rejects before its protocol handshake. Its
+            # transport EOF cannot satisfy the old client's denial predicate.
+            self.report.update(nobody_denied=None, denied_client_control="not_run")
+            return
         nobody_home = f"/tmp/{self.nonce}-nobody"
         self.execute(f"test ! -e {nobody_home} && test ! -L {nobody_home}\n"
                      f"{c}mkdir --mode=700 {nobody_home}\n{c}chown 65534:65534 {nobody_home}\n")
@@ -414,7 +463,7 @@ printf 'ACTIVATED:{self.nonce}\\n'
         self.check_nobody_denial()
 
     def run(self):
-        require(self.command(["--version"])[1].strip() == "msb 0.6.16", "runtime version")
+        require(self.command(["--version"])[1].strip() == self.args.runtime_version, "runtime version")
         require(decode(self.command(["list", "--format", "json"])[1]) == [], "fresh MSB store is not empty")
         tar = self.root / "image.tar"
         self.report["import_tar"] = unpack_archive(Path(self.spec["archive"]), tar, self.limits)
@@ -425,7 +474,7 @@ printf 'ACTIVATED:{self.nonce}\\n'
                       "--no-net", "--cpus", "1", "--memory", "2G", "--root-disk", "4G",
                       "--max-duration", "5m", "--log-level", "debug"], timeout=120)
         self.activation()
-        if self.args.mode == "full":
+        if self.args.mode in {"full", "build-persistence"}:
             from smoke_full import full_acceptance
             original_pid = self.inspect_running_vmm()
             try:
@@ -465,12 +514,19 @@ printf 'ACTIVATED:{self.nonce}\\n'
                 errors.append(str(error))
                 forced = True
         if self.attempted:
+            stopped = False
             try:
-                status, _, _ = self.command(["stop", self.name, "--timeout", "10"], timeout=20,
-                                            check=False, cleanup_deadline=deadline)
-                require(status == 0, "cleanup stop failed")
+                stopped = self.has_current_normal_stop()
             except Exception as error:
-                errors.append(str(error))
+                errors.append(f"normal-stop witness: {error}")
+            evidence["stop_action"] = "already_confirmed_normal_stop" if stopped else "requested"
+            if not stopped:
+                try:
+                    status, _, _ = self.command(["stop", self.name, "--timeout", "10"], timeout=20,
+                                                check=False, cleanup_deadline=deadline)
+                    require(status == 0, "cleanup stop failed")
+                except Exception as error:
+                    errors.append(str(error))
             snapshot("after_stop_before_quiescence")
             try:
                 # Retain shutdown output before removal, independently of the
@@ -511,10 +567,11 @@ printf 'ACTIVATED:{self.nonce}\\n'
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", required=True, help="explicitly authorize this disposable VM test")
-    parser.add_argument("--mode", choices=["activation", "full", "shutdown-diagnostic"], default="activation")
+    parser.add_argument("--mode", choices=["activation", "full", "shutdown-diagnostic", "build-persistence"], default="activation")
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--msb", type=Path, required=True)
     parser.add_argument("--runtime-revision", required=True)
+    parser.add_argument("--runtime-version", default="msb 0.6.16")
     parser.add_argument("--msb-sha256", required=True)
     parser.add_argument("--agentd-sha256", required=True)
     parser.add_argument("--archive-sha256", required=True)
