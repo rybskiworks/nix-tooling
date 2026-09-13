@@ -97,12 +97,14 @@
           rust = ./devenvModules/rust.nix;
           beads = import ./devenvModules/beads.nix inputs.beads;
           determinate = import ./devenvModules/determinate.nix inputs.determinate;
+          lix = ./devenvModules/lix.nix;
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
         nixosModules = {
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
           devenvCache = import ./nixosModules/devenv-cache.nix inputs.devenv;
+          lixGuest = import ./nixosModules/lix-guest.nix inputs.nixpkgs;
           determinateGuest = import ./nixosModules/determinate-guest.nix {
             inherit (inputs) determinate nixpkgs;
           };
@@ -146,6 +148,23 @@
               (import ./nixosModules/determinate-guest.nix { inherit (inputs) determinate nixpkgs; })
               (import ./nixosModules/devenv-cache.nix inputs.devenv)
             ];
+          };
+          lixGuestBase = guestLib.mkNixosImage {
+            pkgs = pkgsWithFenix;
+            name = "lix-nixos-guest";
+            tag = "26.11";
+            stateVersion = "26.05";
+            maxLayers = 64;
+            modules = [
+              (import ./nixosModules/lix-guest.nix inputs.nixpkgs)
+              (import ./nixosModules/devenv-cache.nix inputs.devenv)
+            ];
+          };
+          lixChecks = import ./tests/lix {
+            pkgs = pkgsWithFenix;
+            inherit (inputs) nixpkgs;
+            guest = guestLib;
+            base = lixGuestBase;
           };
           nixosImages = import ./tests/nixos-image {
             pkgs = pkgsWithFenix;
@@ -218,6 +237,7 @@
           checks = {
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
+            lix-contract = lixChecks.contract;
             determinate-client = import ./tests/determinate/client.nix {
               pkgs = pkgsWithFenix;
               inherit (inputs) determinate;
@@ -340,6 +360,8 @@
             determinate-nix = inputs.determinate.inputs.nix.packages.${system}.default;
             determinate-nixd = inputs.determinate.packages.${system}.default;
             guest-determinate-base = commonGuestBase;
+            lix = pkgsWithFenix.lixPackageSets.stable.lix;
+            guest-lix-base = lixGuestBase;
           };
 
           # Image realization stays explicit; ordinary tooling checks are small.
@@ -359,6 +381,9 @@
             # The VM is opt-in and never part of an ordinary tooling flake check.
             determinateChecks = {
               inherit (determinateChecks) nixos;
+            };
+            lixChecks = {
+              inherit (lixChecks) client image leaf;
             };
             beadsChecks = {
               inherit (beadsServerChecks) server;

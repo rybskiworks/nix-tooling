@@ -1,16 +1,22 @@
 # NixOS OCI images with a guest-owned Nix store
 
-The experimental `packages.x86_64-linux.guest-determinate-base` output is one
-shared NixOS userspace archive, with the supported Determinate Nix/Nixd pair.
-The exported common base explicitly imports `nixosModules.devenvCache`, adding
+New images use `packages.x86_64-linux.guest-lix-base`, the canonical shared
+NixOS userspace parent with the stable Lix package from pinned nixpkgs. See
+[Lix guests](lix-guests.md) for engine policy and adoption gates. The explicit
+`guest-determinate-base` compatibility output retains the Determinate Nix/Nixd
+pair; it has not been silently redirected to another engine.
+
+Both exported parents explicitly import `nixosModules.devenvCache`, adding
 the public devenv Cachix endpoint and exact signing key from the locked supplier.
 All leaves inherit this one configuration; no leaf should replace `/etc/nix`.
 The cache module remains opt-in for independently constructed NixOS systems.
 It does not add a trusted user, relax signatures or sandboxing, grant network
-access, or install credentials. Nixd's managed supplier defaults remain intact.
+access, or install credentials. Only the Determinate parent retains Nixd's
+managed supplier defaults.
 It does not build a kernel, boot a VM, activate a host service, or initialize
 Beads. The runtime supplies the kernel and must explicitly invoke the generated
-NixOS init. Base and example-leaf assembly and read-only archive checks have
+NixOS init. The existing results below are for the Determinate parent, not Lix.
+Its base and example-leaf assembly and read-only archive checks have
 passed on x86_64-linux. The separate opt-in Microsandbox test has also passed
 fresh-guest activation, untrusted builds, two-boot persistence and normal
 poweroff. Application leaves and historical runtime state require their own
@@ -21,7 +27,7 @@ All service and agent leaves should consume the same pinned base output:
 ```nix
 tooling.lib.guest.mkNixosLayer {
   inherit pkgs;
-  base = tooling.packages.${pkgs.system}.guest-determinate-base;
+  base = tooling.packages.${pkgs.system}.guest-lix-base;
   name = "my-service";
   tag = "current";
   registrationName = "my-service";
@@ -31,8 +37,8 @@ tooling.lib.guest.mkNixosLayer {
 ```
 
 `pkgs` remains an explicit consumer-owned package set. The base uses tooling's
-shared package set; the official supplier's engine and Nixd package identities
-and locks remain separate. Leaves extend this archive through `fromImage`;
+shared package set, including Lix. The legacy Determinate supplier's engine and
+Nixd package identities and locks remain separate. Leaves extend the selected archive through `fromImage`;
 they do not evaluate their own NixOS system or install a different engine.
 Application configuration, credentials, mounts and service lifecycle still
 belong to the workload. Never place credentials in an image derivation.
@@ -40,7 +46,7 @@ belong to the workload. Never place credentials in an image derivation.
 For an explicitly customized common base, `lib.guest.mkNixosImage` accepts
 `pkgs`, `name`, `stateVersion`, optional `tag`, `modules` and `maxLayers`.
 It imports `nixosModules.microsandboxGuest`; callers must also choose an engine
-profile, normally `nixosModules.determinateGuest`. Do not create independently
+profile, normally `nixosModules.lixGuest`. Do not create independently
 customized bases for each leaf when one shared image is required.
 
 ## Initialization and readiness
@@ -77,8 +83,9 @@ Nix daemon and session CA variables point to that final bundle. No runtime
 certificate is baked into the image. An actual guest test must check its
 contents and the preserved control connection after activation.
 
-`guest-store-registration.service` must complete before sysinit and both
-daemon sockets. It loads every image registration into the local guest
+`guest-store-registration.service` must complete before sysinit and the selected
+engine's daemon sockets/services, including Lix's per-connection template. It
+loads every image registration into the local guest
 database and creates GC roots on every boot. `guest-store-ready.target` means
 registration completed; it does **not** prove a daemon handshake, successful
 untrusted build, networking, application readiness or graceful shutdown.
