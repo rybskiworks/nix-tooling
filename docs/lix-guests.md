@@ -109,7 +109,36 @@ The optional image check realizes the parent, verifies the emitted plain daemon
 and socket against the exact package, checks registration/CA overrides, and
 requires the unsupported template to resolve to `/dev/null`.
 
-No Lix image boot is claimed by these source changes.
+Source checks alone do not prove a Lix image boot. The existing independent
+runner accepts the metadata-only `legacyPackages.x86_64-linux.lixChecks.smokeSpec`
+with `--mode build-persistence`. Its version-two spec explicitly selects Lix:
+`nix store ping --json`, the plain daemon/socket, the exact daemon executable,
+the masked unsupported template, and the exclusive NixOS/devenv cache list.
+Pass `--runtime-version 'msb 0.6.18'` with the matching reviewed current runtime
+hashes; the old version-one spec and CLI version default remain unchanged.
+Lix mode requires 25 GiB initial free disk, retains a 20 GiB floor and 8 GiB
+available-memory floor, and keeps the existing 4 GiB scratch/global-growth limits,
+300-second work plus 90-second cleanup budgets, and one-CPU/2-GiB guest.
+
+This mode requires the real root/untrusted daemon handshakes, two uncached builds
+including restricted-setting overrides, daemon restart, same-store VM restart,
+both normal poweroffs, healthy boot units, and complete cleanup. Its success is
+`build_persistence_passed`, **never** `full_acceptance_passed`; the report records
+`full_acceptance: false` and `denied_client_control: not_run`.
+Cleanup omits a repeated stop only after this runner has validated the current
+launch's normal exit and flush, then freshly observed no owned process. Every new
+launch attempt invalidates that evidence. This does not establish native
+repeat-stop idempotence or permit cleanup from terminal status alone.
+
+Lix 2.94.2 rejects a disallowed peer in a per-connection subdaemon before its
+protocol handshake. A client EOF/broken pipe with partial `{"url":"daemon"}`
+JSON is not authorization evidence. Lix full/activation modes are therefore
+refused before creating a VM until a journal-correlated disallowed-client control
+is implemented. That later control must bind a fresh cursor, unit invocation and
+the unique test peer; it must not reuse Determinate's client error predicate.
+See the [pinned daemon source](https://git.lix.systems/lix-project/lix/src/tag/2.94.2/lix/nix/daemon.cc)
+and [ping implementation](https://git.lix.systems/lix-project/lix/src/tag/2.94.2/lix/nix/ping-store.cc).
+
 Existing Determinate VM results and `nixosImages.smokeSpec` remain specific to
 their original engine; they are not Lix evidence. Before adoption, separately
 review closure/download resources, inspect actual upstream units and archive

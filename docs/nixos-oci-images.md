@@ -178,6 +178,11 @@ revision is a caller assertion, not something inferred from executable bytes.
 `legacyPackages.x86_64-linux.nixosImages.smokeSpec` contains the exact base
 and probe-tool paths without making their realization a dependency of the
 small metadata output. Realize and review those inputs separately first.
+The original version-one spec remains Determinate-specific. The explicit Lix
+version-two spec and intentionally narrower `build-persistence` result are
+documented in [Shared Lix guests](lix-guests.md); they never upgrade a missing
+disallowed-client control into full acceptance. `--runtime-version` selects the
+expected literal CLI version alongside the mandatory exact binary hashes.
 
 The runner requires Linux pidfds/subreaping, accessible KVM, 22 GiB free disk
 and 8 GiB available host memory. It creates one private scratch root, empty
@@ -198,6 +203,9 @@ admitted untrusted client. A second boot must retain the exact recorded test
 account before recreating its volatile private home.
 
 Root and admitted-client trust handshakes run before the nobody negative. The
+selected registration/socket units are each checked separately: systemctl's
+multi-unit `is-active` succeeds if any unit is active, not if all are active.
+For the original Determinate modes, the
 negative makes at most three identical requests, retrying only the exact
 16-byte greeting broken-pipe response with the expected otherwise-empty daemon
 JSON. Every attempt is retained, and at least one explicit authorization denial

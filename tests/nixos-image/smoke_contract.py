@@ -10,6 +10,7 @@ HEX = re.compile(r"[0-9a-f]{64}")
 QA_NAME, QA_UID, QA_GID = "nix-smoke", 1000, 100
 DEVENV_CACHE = "https://devenv.cachix.org"
 DEVENV_KEY = "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
+LIX_RUNTIME_REVISION = "251b368a868d578ead123071c3e6bc8eec013817"
 FALLBACK = ("flush window elapsed, triggering host exit", "graceful stop exceeded timeout",
             "escalating to kill", "agent relay wait_ready failed",
             "stop_local: agent endpoint unreachable; falling back to process termination")
@@ -30,7 +31,7 @@ def store_path(value):
     return value
 
 
-def cache_configuration(settings):
+def cache_configuration(settings, *, engine="determinate"):
     """Verify the shared signed cache addition, retaining Nixd-managed defaults."""
     values = {}
     for key in ("substituters", "trusted-substituters", "trusted-public-keys"):
@@ -43,6 +44,15 @@ def cache_configuration(settings):
                     for item in values["trusted-public-keys"]), "unexpected devenv signing key")
     require(not any(item.rstrip("/") == DEVENV_CACHE for item in values["trusted-substituters"]),
             "devenv cache changed client substitution authority")
+    require(engine in {"determinate", "lix"}, "unsupported engine")
+    if engine == "lix":
+        expected = {
+            "substituters": ["https://cache.nixos.org/", DEVENV_CACHE],
+            "trusted-substituters": [],
+            "trusted-public-keys": ["cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=", DEVENV_KEY],
+        }
+        require(all(sorted(values[key]) == sorted(value) for key, value in expected.items()),
+                "unexpected Lix cache configuration")
     return values
 
 
@@ -61,9 +71,15 @@ def isolated_environment(root, msb):
 
 
 def validate_spec(spec):
-    require(spec.get("version") == 1, "unsupported smoke spec")
-    fields = {"archive", "toplevel", "engine", "nixd", "bash", "coreutils", "systemd", "glibc", "utilLinux", "registration"}
-    require(set(spec) == fields | {"version", "roots"}, "unexpected spec fields")
+    require(type(spec.get("version")) is int and spec["version"] in {1, 2}, "unsupported smoke spec")
+    fields = {"archive", "toplevel", "engine", "bash", "coreutils", "systemd", "glibc", "utilLinux", "registration"}
+    extra = {"version", "roots"}
+    if spec["version"] == 1:
+        fields.add("nixd")
+    else:
+        extra.add("engineKind")
+        require(spec.get("engineKind") == "lix", "unsupported explicit engine")
+    require(set(spec) == fields | extra, "unexpected spec fields")
     for name in fields:
         store_path(spec[name])
     require(isinstance(spec["roots"], list) and len(spec["roots"]) == 2, "base roots")
@@ -73,7 +89,65 @@ def validate_spec(spec):
     return spec
 
 
-def validate_inspect(record, name, image):
+def engine_kind(spec):
+    """The original version-one fixture keeps its Determinate defaults."""
+    return spec.get("engineKind", "determinate")
+
+
+def validate_mode(spec, mode):
+    if engine_kind(spec) == "lix":
+        require(mode == "build-persistence", "Lix full acceptance awaits the journal-correlated denial control")
+    else:
+        require(mode in {"activation", "full", "shutdown-diagnostic"}, "unsupported legacy mode")
+
+
+def inspect_runtime_contract(spec, revision, version):
+    if engine_kind(spec) == "lix":
+        require(spec.get("version") == 2 and revision == LIX_RUNTIME_REVISION
+                and version == "msb 0.6.18", "unreviewed Lix runtime/spec pair")
+        return LIX_RUNTIME_REVISION
+    return "legacy"
+
+
+def daemon_query(spec):
+    kind = engine_kind(spec)
+    require(kind in {"determinate", "lix"}, "unsupported engine")
+    operation = "ping" if kind == "lix" else "info"
+    return spec["engine"] + f"/bin/nix store {operation} --store daemon --json"
+
+
+def restricted_override_warning(spec, setting):
+    prefix = "Ignoring" if engine_kind(spec) == "lix" else "ignoring"
+    return prefix + " the client-specified setting '" + setting + "'"
+
+
+def readiness_units(spec):
+    kind = engine_kind(spec)
+    require(kind in {"determinate", "lix"}, "unsupported engine")
+    units = ["guest-store-registration.service", "nix-daemon.socket"]
+    return units if kind == "lix" else units + ["determinate-nixd.socket"]
+
+
+def readiness_script(spec):
+    # Multiple arguments to is-active succeed when ANY unit is active.
+    return "\n".join(spec["systemd"] + "/bin/systemctl is-active --quiet " + unit
+                     for unit in readiness_units(spec))
+
+
+def validate_daemon_service(spec, service):
+    if engine_kind(spec) == "lix":
+        # systemctl's structured ExecStart value must select this executable,
+        # not merely mention it in another program's arguments.
+        require(re.search(r"(?:^|[ {])path=" + re.escape(spec["engine"] + "/bin/nix-daemon")
+                          + r" ;", service) is not None, "wrong Lix daemon executable")
+        require("argv[]=nix-daemon --daemon ;" in service, "wrong Lix daemon arguments")
+    else:
+        require(spec["nixd"] + "/bin/determinate-nixd" in service and spec["engine"] + "/bin" in service,
+                "wrong daemon pair")
+
+
+def validate_inspect(record, name, image, *, runtime_revision="legacy"):
+    require(runtime_revision in {"legacy", LIX_RUNTIME_REVISION}, "unsupported inspect runtime")
     require(record.get("name") == name and record.get("status") == "Running", "sandbox not running")
     require(record.get("pending_changes") == [], "pending configuration changes")
     for config in (record.get("config"), record.get("active_config")):
@@ -120,6 +194,10 @@ def validate_inspect(record, name, image):
                     "intercept_ca": {"cert_path": None, "key_path": None},
                     "cache": {"capacity": 1000, "validity_hours": 24}},
         }
+        if runtime_revision == LIX_RUNTIME_REVISION:
+            # Native 251 serializes its default hostname-inspection flag.
+            # Deny-all policy and every other capability remain exact.
+            expected_network["strict"] = False
         require(json.dumps(config.get("network"), sort_keys=True) == json.dumps(expected_network, sort_keys=True),
                 "unexpected network capability/default")
         require(config.get("lifecycle", {}).get("max_duration_secs") == 300, "runtime lifetime cap")
@@ -186,8 +264,14 @@ def validate_stop(stop):
 def verdict(report):
     require(not report.get("error"), "primary failure")
     require(report.get("activation") is True and report.get("registration") is True, "activation incomplete")
-    require(report.get("root_trusted") is True and report.get("qa_trusted") is False
-            and report.get("nobody_denied") is True, "daemon trust mismatch")
+    require(report.get("root_trusted") is True and report.get("qa_trusted") is False, "daemon trust mismatch")
+    positive_only = report.get("mode") == "build-persistence"
+    if positive_only:
+        require(report.get("engine_kind") == "lix" and "nobody_denied" in report
+                and report["nobody_denied"] is None and report.get("denied_client_control") == "not_run",
+                "missing explicit denied-client coverage limitation")
+    else:
+        require(report.get("nobody_denied") is True, "daemon trust mismatch")
     require(report.get("cleanup") == {"empty_store": True, "children_empty": True, "forced": False, "errors": []}, "cleanup incomplete")
     if report.get("mode") == "activation":
         return "activation_only_passed"
@@ -199,12 +283,15 @@ def verdict(report):
                 "diagnostic cannot replace full lifecycle acceptance")
         validate_diagnostic(report.get("shutdown_diagnostic", {}))
         return "guest_poweroff_diagnostic_passed"
-    require(report.get("mode") == "full", "unknown mode")
+    require(report.get("mode") == "full" or positive_only, "unknown mode")
     require(report.get("builds") == ["ordinary", "untrusted-overrides"], "uncached builds incomplete")
     require(report.get("daemon_restart") is True and report.get("persistent_store") is True, "persistence incomplete")
     require(len(report.get("stops", [])) == 2, "normal shutdown count")
     for stop in report["stops"]:
         validate_stop(stop)
+        if positive_only:
+            require("Powering off." in stop.get("logs", "") and "reboot: Power down" in stop.get("logs", ""),
+                    "Lix guest poweroff sequence incomplete")
     health = report.get("boot_diagnostics")
     require(isinstance(health, list) and len(health) == 2
             and all(isinstance(snapshot, dict)
@@ -217,4 +304,4 @@ def verdict(report):
                 and isinstance(observed.get("stdout"), str)
                 and re.fullmatch(r"[1-9][0-9]{0,9}\n", observed["stdout"]) is not None,
                 "guest kernel PID range was not observed")
-    return "full_acceptance_passed"
+    return "build_persistence_passed" if positive_only else "full_acceptance_passed"

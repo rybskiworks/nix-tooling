@@ -383,7 +383,12 @@
               inherit (determinateChecks) nixos;
             };
             lixChecks = {
-              inherit (lixChecks) client image leaf;
+              inherit (lixChecks)
+                client
+                image
+                leaf
+                smokeSpec
+                ;
             };
             beadsChecks = {
               inherit (beadsServerChecks) server;

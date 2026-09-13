@@ -136,6 +136,7 @@ let
       ./smoke_full.py
       ./shutdown_diagnostic.py
       ./test_smoke_contract.py
+      ./test_lix_smoke.py
       ./test_shutdown_diagnostic.py
       ./fixtures/msb-inspect.json
       ../support/children.py
@@ -245,6 +246,7 @@ assert builtins.all (value: value) (builtins.attrValues assertions);
         python -B ${./test_layer_inheritance.py} -v
         python -B -m unittest discover -s ${smokeSource}/support -v
         python -B -m unittest discover -s ${smokeSource}/nixos-image -p test_smoke_contract.py -v
+        python -B -m unittest discover -s ${smokeSource}/nixos-image -p test_lix_smoke.py -v
         python -B -m unittest discover -s ${smokeSource}/nixos-image -p test_shutdown_diagnostic.py -v
         touch "$out/ok"
       '';
