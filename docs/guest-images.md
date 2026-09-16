@@ -1,5 +1,9 @@
 # Shared guest images
 
+For the proposed engine-selection and immutable shared-store integration, see
+[Selectable guest engines and shared Nix stores](shared-nix-stores.md). That
+proposal does not change the current constructors, defaults or runtime behavior.
+
 `lib.guest.mkImage` is a thin, runtime-neutral wrapper around the pinned
 `dockerTools.buildLayeredImage`. It requires an explicit package set and adds no
 runtime, Nix engine, daemon, Beads, agent client, boot shim or guest registration.
