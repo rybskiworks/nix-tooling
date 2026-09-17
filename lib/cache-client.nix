@@ -2,16 +2,26 @@
 #
 # Pure: the caller supplies the endpoint and the single public verification
 # key; nothing is read from the ambient configuration and nothing is written.
-# The strict argument set is the trust boundary, so a second key, a wildcard
-# substituter, a reader credential or a trust grant beyond root cannot be
-# expressed here at all.
+# The named arguments are the trust boundary: unknown input is rejected, so a
+# second key, a wildcard substituter, a reader credential and a trust grant
+# beyond root cannot be expressed here at all.
 {
   lib,
   endpoint,
   publicKey,
   insecureLocalEndpoint ? false,
-}:
+  ...
+}@declared:
 let
+  # Anything the caller adds next to the named pair is a trust decision this
+  # helper does not make, so unknown input is rejected instead of ignored.
+  accepted = [
+    "endpoint"
+    "insecureLocalEndpoint"
+    "lib"
+    "publicKey"
+  ];
+  unexpected = builtins.attrNames (builtins.removeAttrs declared accepted);
   # scheme://authority/path: the authority ends at the first path separator or
   # query/fragment delimiter, so credentials cannot hide inside it.
   url =
@@ -40,18 +50,28 @@ let
   substituter = if lib.hasSuffix "/" endpoint then lib.removeSuffix "/" endpoint else endpoint;
   keyForm = "([A-Za-z0-9][A-Za-z0-9._-]*)-[0-9]+:[A-Za-z0-9+/]{43}=";
 in
+assert lib.assertMsg (unexpected == [ ]) (
+  "cache client accepts only endpoint, publicKey and insecureLocalEndpoint, but was given: "
+  + lib.concatStringsSep ", " unexpected
+);
 assert lib.assertMsg (builtins.isString endpoint) "cache endpoint must be a string";
-assert lib.assertMsg (builtins.isBool insecureLocalEndpoint) "insecureLocalEndpoint must be a boolean";
+assert lib.assertMsg (
+  builtins.isBool insecureLocalEndpoint
+) "insecureLocalEndpoint must be a boolean";
 assert lib.assertMsg (endpoint != "") "cache endpoint must not be empty";
 assert lib.assertMsg (
   builtins.match "[^ \t\n\r]+" endpoint != null
 ) "cache endpoint must be exactly one URL without whitespace";
-assert lib.assertMsg (!lib.hasInfix "," endpoint) "cache endpoint must not be a comma-separated list";
+assert lib.assertMsg (
+  !lib.hasInfix "," endpoint
+) "cache endpoint must not be a comma-separated list";
 assert lib.assertMsg (url != null) "cache endpoint must be an absolute scheme://host URL";
 assert lib.assertMsg (
   !lib.hasInfix "@" authority
 ) "cache endpoint must not carry credentials or user information";
-assert lib.assertMsg (!lib.hasInfix "*" endpoint) "cache endpoint must not be a wildcard substituter";
+assert lib.assertMsg (
+  !lib.hasInfix "*" endpoint
+) "cache endpoint must not be a wildcard substituter";
 assert lib.assertMsg (
   !lib.hasInfix "?" endpoint && !lib.hasInfix "#" endpoint
 ) "cache endpoint must not carry a query string or fragment";

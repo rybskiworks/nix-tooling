@@ -23,20 +23,19 @@ let
   rejects = spec: !(builtins.tryEval (builtins.deepSeq (select spec) true)).success;
   guest = import ../../lib/guest { inherit nixpkgs; };
   module = import ../../nixosModules/cache-client.nix;
-  system =
+  evaluated =
     modules:
     guest.mkNixosSystem {
       inherit pkgs;
       stateVersion = "26.05";
       modules = [ { nix.enable = true; } ] ++ modules;
     };
-  evaluate = modules: (system modules).config;
   # Force both the declared clients and the resulting settings, so an invalid
   # client or an unknown client option fails the whole evaluation.
   rejectsConfiguration =
     modules:
     let
-      configured = evaluate modules;
+      configured = (evaluated modules).config;
     in
     !(builtins.tryEval (
       builtins.deepSeq [
@@ -44,13 +43,13 @@ let
         configured.nix.settings
       ] true
     )).success;
-  base = evaluate [ ];
-  inert = evaluate [ module ];
-  enabled = evaluate [
+  baseSystem = evaluated [ ];
+  inertSystem = evaluated [ module ];
+  enabledSystem = evaluated [
     module
     { nix.cacheClients.example = valid; }
   ];
-  consumer = evaluate [
+  consumerSystem = evaluated [
     module
     {
       nix.cacheClients.example = valid;
@@ -58,7 +57,7 @@ let
       nix.settings.trusted-public-keys = [ consumerKey ];
     }
   ];
-  pair = evaluate [
+  pairSystem = evaluated [
     module
     {
       nix.cacheClients.primary = valid;
@@ -69,26 +68,32 @@ let
       };
     }
   ];
+  base = baseSystem.config.nix.settings;
+  inert = inertSystem.config.nix.settings;
+  enabled = enabledSystem.config.nix.settings;
+  consumer = consumerSystem.config.nix.settings;
+  pair = pairSystem.config.nix.settings;
   cacheSettings = value: builtins.removeAttrs value [ "substituters" "trusted-public-keys" ];
   sort = lib.sort builtins.lessThan;
   # Enumerate every option the module declares, so the trust surface is
-  # asserted closed instead of assumed.
+  # asserted closed instead of assumed. getSubOptions returns the declared
+  # options of one client entry.
   declaredOptions =
-    options:
+    prefix: options:
     lib.concatMap (
       name:
       if (options.${name}._type or "") == "option" then
-        [ options.${name}.name ]
+        [ (lib.concatStringsSep "." (prefix ++ [ name ])) ]
       else
-        declaredOptions options.${name}
+        declaredOptions (prefix ++ [ name ]) options.${name}
     ) (builtins.attrNames (builtins.removeAttrs options [ "_module" ]));
-  clientOptions = declaredOptions (
-    (system [ module ]).options.nix.cacheClients.type.getSubOptions [
+  clientOptions = declaredOptions [ "nix" "cacheClients" "*" ] (
+    inertSystem.options.nix.cacheClients.type.getSubOptions [
       "nix"
       "cacheClients"
     ]
   );
-  cacheEntries = enabled.nix.settings.substituters ++ enabled.nix.settings.trusted-public-keys;
+  cacheEntries = enabled.substituters ++ enabled.trusted-public-keys;
   assertions = {
     fragment =
       select valid == {
@@ -150,28 +155,24 @@ let
     trustedUsersRejected = rejects (valid // { trustedUsers = [ "alice" ]; });
     requireSigsRejected = rejects (valid // { require-sigs = false; });
     sandboxRejected = rejects (valid // { sandbox = false; });
-    moduleInertWithoutClients = inert.nix.settings == base.nix.settings;
-    selectedCacheAdded =
-      sort enabled.nix.settings.substituters == sort (base.nix.settings.substituters ++ [ endpoint ]);
+    moduleInertWithoutClients = inert == base;
+    selectedCacheAdded = sort enabled.substituters == sort (base.substituters ++ [ endpoint ]);
     selectedKeyAdded =
-      sort enabled.nix.settings.trusted-public-keys
-      == sort (base.nix.settings.trusted-public-keys ++ [ publicKey ]);
+      sort enabled.trusted-public-keys == sort (base.trusted-public-keys ++ [ publicKey ]);
     consumerCachePreserved =
-      sort consumer.nix.settings.substituters
-      == sort (enabled.nix.settings.substituters ++ [ "https://cache.consumer.invalid" ]);
+      sort consumer.substituters == sort (enabled.substituters ++ [ "https://cache.consumer.invalid" ]);
     consumerKeyPreserved =
-      sort consumer.nix.settings.trusted-public-keys
-      == sort (enabled.nix.settings.trusted-public-keys ++ [ consumerKey ]);
+      sort consumer.trusted-public-keys == sort (enabled.trusted-public-keys ++ [ consumerKey ]);
     namedClientsAdditive =
-      sort pair.nix.settings.substituters == sort (base.nix.settings.substituters ++ [
+      sort pair.substituters == sort (base.substituters ++ [
         endpoint
         loopbackEndpoint
       ]);
-    nothingElseChanged = cacheSettings base.nix.settings == cacheSettings enabled.nix.settings;
-    sandboxRetained = enabled.nix.settings.sandbox && !enabled.nix.settings.sandbox-fallback;
-    signaturesRetained = enabled.nix.settings.require-sigs;
-    rootOnlyTrust = lib.unique enabled.nix.settings.trusted-users == [ "root" ];
-    noExtraTrustedSubstituters = enabled.nix.settings.trusted-substituters == [ ];
+    nothingElseChanged = cacheSettings base == cacheSettings enabled;
+    sandboxRetained = enabled.sandbox && !enabled.sandbox-fallback;
+    signaturesRetained = enabled.require-sigs;
+    rootOnlyTrust = lib.unique enabled.trusted-users == [ "root" ];
+    noExtraTrustedSubstituters = enabled.trusted-substituters == [ ];
     trustSurfaceClosed =
       clientOptions == [
         "nix.cacheClients.*.endpoint"
@@ -196,8 +197,8 @@ let
       ]
       && rejectsConfiguration [ module { nix.cacheClients.example.requireSigs = false; } ]
       && rejectsConfiguration [ module { nix.cacheClients.example.sandbox = false; } ]
-      && enabled.nix.settings.trusted-substituters == [ ]
-      && lib.unique enabled.nix.settings.trusted-users == [ "root" ];
+      && enabled.trusted-substituters == [ ]
+      && lib.unique enabled.trusted-users == [ "root" ];
     keylessClientRejected =
       rejectsConfiguration [ module { nix.cacheClients.example = { inherit endpoint; }; } ];
     endpointlessClientRejected =

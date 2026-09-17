@@ -100,6 +100,7 @@
           lix = ./devenvModules/lix.nix;
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
+        lib.cacheClient = ./lib/cache-client.nix;
         nixosModules = {
           cacheClient = ./nixosModules/cache-client.nix;
           guestBase = ./nixosModules/guest-base.nix;
