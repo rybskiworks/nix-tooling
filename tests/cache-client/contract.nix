@@ -52,19 +52,23 @@ let
   consumerSystem = evaluated [
     module
     {
-      nix.cacheClients.example = valid;
-      nix.settings.substituters = [ "https://cache.consumer.invalid" ];
-      nix.settings.trusted-public-keys = [ consumerKey ];
+      nix = {
+        cacheClients.example = valid;
+        settings.substituters = [ "https://cache.consumer.invalid" ];
+        settings.trusted-public-keys = [ consumerKey ];
+      };
     }
   ];
   pairSystem = evaluated [
     module
     {
-      nix.cacheClients.primary = valid;
-      nix.cacheClients.local = {
-        endpoint = loopbackEndpoint;
-        publicKey = loopbackKey;
-        insecureLocalEndpoint = true;
+      nix.cacheClients = {
+        primary = valid;
+        local = {
+          endpoint = loopbackEndpoint;
+          publicKey = loopbackKey;
+          insecureLocalEndpoint = true;
+        };
       };
     }
   ];
@@ -73,7 +77,12 @@ let
   enabled = enabledSystem.config.nix.settings;
   consumer = consumerSystem.config.nix.settings;
   pair = pairSystem.config.nix.settings;
-  cacheSettings = value: builtins.removeAttrs value [ "substituters" "trusted-public-keys" ];
+  cacheSettings =
+    value:
+    builtins.removeAttrs value [
+      "substituters"
+      "trusted-public-keys"
+    ];
   sort = lib.sort builtins.lessThan;
   # Enumerate every option the module declares, so the trust surface is
   # asserted closed instead of assumed. getSubOptions returns the declared
@@ -106,8 +115,7 @@ let
         endpoint = loopbackEndpoint;
         publicKey = loopbackKey;
         insecureLocalEndpoint = true;
-      }
-      == {
+      } == {
         substituters = [ loopbackEndpoint ];
         trusted-public-keys = [ loopbackKey ];
       };
@@ -116,15 +124,11 @@ let
     whitespaceEndpointRejected = rejects (
       valid // { endpoint = "${endpoint} https://other.example.org"; }
     );
-    commaEndpointRejected = rejects (
-      valid // { endpoint = "${endpoint},https://other.example.org"; }
-    );
+    commaEndpointRejected = rejects (valid // { endpoint = "${endpoint},https://other.example.org"; });
     relativeEndpointRejected = rejects (valid // { endpoint = "cache.example.org"; });
     wildcardEndpointRejected = rejects (valid // { endpoint = "*"; });
     wildcardHostRejected = rejects (valid // { endpoint = "https://*.example.org"; });
-    credentialsRejected = rejects (
-      valid // { endpoint = "https://reader:secret@cache.example.org"; }
-    );
+    credentialsRejected = rejects (valid // { endpoint = "https://reader:secret@cache.example.org"; });
     userinfoRejected = rejects (valid // { endpoint = "https://token@cache.example.org"; });
     queryTokenRejected = rejects (valid // { endpoint = "${endpoint}?token=secret"; });
     fragmentTokenRejected = rejects (valid // { endpoint = "${endpoint}#secret"; });
@@ -164,10 +168,13 @@ let
     consumerKeyPreserved =
       sort consumer.trusted-public-keys == sort (enabled.trusted-public-keys ++ [ consumerKey ]);
     namedClientsAdditive =
-      sort pair.substituters == sort (base.substituters ++ [
-        endpoint
-        loopbackEndpoint
-      ]);
+      sort pair.substituters == sort (
+        base.substituters
+        ++ [
+          endpoint
+          loopbackEndpoint
+        ]
+      );
     nothingElseChanged = cacheSettings base == cacheSettings enabled;
     sandboxRetained = enabled.sandbox && !enabled.sandbox-fallback;
     signaturesRetained = enabled.require-sigs;
@@ -185,7 +192,12 @@ let
     cannotTrustEverything =
       rejectsConfiguration [
         module
-        { nix.cacheClients.example = { endpoint = "*"; publicKey = "*"; }; }
+        {
+          nix.cacheClients.example = {
+            endpoint = "*";
+            publicKey = "*";
+          };
+        }
       ]
       && rejectsConfiguration [
         module
@@ -195,14 +207,24 @@ let
         module
         { nix.cacheClients.example.trustedUsers = [ "alice" ]; }
       ]
-      && rejectsConfiguration [ module { nix.cacheClients.example.requireSigs = false; } ]
-      && rejectsConfiguration [ module { nix.cacheClients.example.sandbox = false; } ]
+      && rejectsConfiguration [
+        module
+        { nix.cacheClients.example.requireSigs = false; }
+      ]
+      && rejectsConfiguration [
+        module
+        { nix.cacheClients.example.sandbox = false; }
+      ]
       && enabled.trusted-substituters == [ ]
       && lib.unique enabled.trusted-users == [ "root" ];
-    keylessClientRejected =
-      rejectsConfiguration [ module { nix.cacheClients.example = { inherit endpoint; }; } ];
-    endpointlessClientRejected =
-      rejectsConfiguration [ module { nix.cacheClients.example = { inherit publicKey; }; } ];
+    keylessClientRejected = rejectsConfiguration [
+      module
+      { nix.cacheClients.example = { inherit endpoint; }; }
+    ];
+    endpointlessClientRejected = rejectsConfiguration [
+      module
+      { nix.cacheClients.example = { inherit publicKey; }; }
+    ];
     credentialEndpointRejected = rejectsConfiguration [
       module
       {
