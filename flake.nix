@@ -100,7 +100,9 @@
           lix = ./devenvModules/lix.nix;
         };
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
+        lib.cacheClient = ./lib/cache-client.nix;
         nixosModules = {
+          cacheClient = ./nixosModules/cache-client.nix;
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
           devenvCache = import ./nixosModules/devenv-cache.nix inputs.devenv;
@@ -241,6 +243,10 @@
             determinate-client = import ./tests/determinate/client.nix {
               pkgs = pkgsWithFenix;
               inherit (inputs) determinate;
+            };
+            cache-client-contract = import ./tests/cache-client/contract.nix {
+              pkgs = pkgsWithFenix;
+              inherit (inputs) nixpkgs;
             };
             devenv-cache-contract = import ./tests/determinate/devenv-cache.nix {
               pkgs = pkgsWithFenix;
