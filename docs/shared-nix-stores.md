@@ -6,7 +6,6 @@ describe composition patterns, not newly implemented public APIs.
 
 Implementation: [nix-tooling #15](https://github.com/rybskiworks/nix-tooling/issues/15).
 Runtime/integration: [Workestrate #67](https://github.com/rybskiworks/workestrate/issues/67).
-Prepared with ChatGPT from the design discussion and source inspection.
 
 ## Decision
 
@@ -52,15 +51,17 @@ retaining the whole lower generation until its consumers release it.
 
 ## Current repository boundaries
 
-The inspected tooling main revision is
-`a403c2c111e24db64feb5748bbba939308048c07`. It provides the Determinate guest
-profile and common registered-image machinery.
+The tooling main revision at the time of writing is
+`1278e0e604ceded76a17a4420bcee1c8f207c340`. It provides the Determinate guest
+profile and common registered-image machinery, plus the merged Lix guest
+parent, the Lix daemon build-persistence smoke test, the signed-cache client
+module, and the offline signed binary-cache oracle.
 
-The inspected fleet instead pins tooling
-`e34328e28375f512d014af2424e98741e7c7929b`, selects `guest-lix-base`, and passes
-that base to its workload builders. Do not mistake a fleet's pinned branch
-revision for tooling main. Preserve and reconcile existing Lix work, including
-[the Lix smoke PR][lix-smoke], rather than duplicating or overwriting it.
+A fleet may still pin an older tooling revision that selects `guest-lix-base`
+from a branch and passes that base to its workload builders. Do not mistake a
+fleet's pinned revision for tooling main. Build on the merged Lix work,
+including [the merged Lix smoke test][lix-smoke], rather than duplicating or
+overwriting it.
 
 Relevant existing interfaces:
 
@@ -93,7 +94,7 @@ Workestrate runtime: realizes, attaches and leases the generation
 ## Engine selection: ordinary pure Nix composition
 
 Keep the explicit `guest-lix-base` and `guest-determinate-base` package outputs.
-Once the existing Lix branch is integrated, a fleet can select the base once:
+With the Lix work integrated on main, a fleet can select the base once:
 
 ```nix
 { tooling, system, engine }:
@@ -409,7 +410,7 @@ Required gates before changing the fleet default:
 
 Implementation order:
 
-1. Reconcile pending Lix work and expose engine variants without a default change.
+1. Expose engine variants without a default change (Lix parent and smoke test are merged).
 2. Reuse closureInfo/image metadata; implement the sealed materializer and leases.
 3. Implement runtime mount handoff and complete guest registration/rooting.
 4. Run the ordinary-local matrix with both engines. Choose the first supported
@@ -434,7 +435,7 @@ memory/trust-boundary feature.
 [microvm-mounts]: https://github.com/microvm-nix/microvm.nix/blob/187b0a390ee054028106a674e7b01b1cb940cbba/nixos-modules/microvm/mounts.nix
 [microvm-store]: https://github.com/microvm-nix/microvm.nix/blob/187b0a390ee054028106a674e7b01b1cb940cbba/nixos-modules/microvm/store-disk.nix
 [microvm-shares]: https://microvm-nix.github.io/microvm.nix/shares.html
-[lix-smoke]: https://github.com/rybskiworks/nix-tooling/pull/14
+[lix-smoke]: https://github.com/rybskiworks/nix-tooling/pull/20
 [closure-info]: https://github.com/NixOS/nixpkgs/blob/a799d3e3886da994fa307f817a6bc705ae538eeb/pkgs/build-support/closure-info.nix
 [overlayfs]: https://docs.kernel.org/filesystems/overlayfs.html
 [native-overlay]: https://nix.dev/manual/nix/2.34/store/types/experimental-local-overlay-store
