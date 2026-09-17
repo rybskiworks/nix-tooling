@@ -6,7 +6,9 @@ import os
 import shlex
 import time
 
-from smoke_contract import QA_GID, QA_NAME, QA_UID, cache_configuration, decode, derivation_inputs, mapped_uid, require, store_path, validate_stop
+from smoke_contract import (QA_GID, QA_NAME, QA_UID, cache_configuration, daemon_query, decode,
+                            derivation_inputs, engine_kind, mapped_uid, require, restricted_override_warning,
+                            store_path, validate_stop)
 
 
 def log_text(raw, *, source=None):
@@ -146,6 +148,7 @@ def stop(fixture, marker):
             raise log_error
         validate_stop(record)
         require(not fixture.runtime_pids(), "VMM survived stop")
+        fixture.record_normal_stop(record)
     finally:
         record["signals"] = fixture.supervisor.signal_events[previous_signals:]
         os.close(fd)
@@ -171,7 +174,7 @@ def prepare_full_acceptance(fixture):
     settings = fixture.guest_json(nix + "nix config show --json", user=user)
     require(settings["sandbox"]["value"] is True and settings["sandbox-fallback"]["value"] is False, "sandbox configuration")
     require(settings["require-sigs"]["value"] is True and set(settings["trusted-users"]["value"]) == {"root"}, "daemon trust configuration")
-    fixture.report["configured_caches"] = cache_configuration(settings)
+    fixture.report["configured_caches"] = cache_configuration(settings, engine=engine_kind(s))
     fixture.report["substitution_policy"] = "per-request substitute=false; configured supplier defaults retained"
     outputs = []
     fixture.execute(c + "mkdir -p /var/lib/nixos-smoke\n")
@@ -216,13 +219,13 @@ def prepare_full_acceptance(fixture):
         evidence["uid_map"] = mapping
         if kind == "untrusted-overrides":
             for setting in ("sandbox", "require-sigs"):
-                require("ignoring the client-specified setting '" + setting + "'" in stderr, "restricted override warning missing")
-            require(fixture.guest_json(nix + f"nix store info --store daemon --json --option trusted-users {QA_NAME}", user=user)["trusted"] is False, "client escalated trust")
+                require(restricted_override_warning(s, setting) in stderr, "restricted override warning missing")
+            require(fixture.guest_json(daemon_query(s) + f" --option trusted-users {QA_NAME}", user=user)["trusted"] is False, "client escalated trust")
         fixture.execute(f"{c}ln -s {out} /nix/var/nix/gcroots/{name}\n")
         fixture.report["builds"].append(kind)
         outputs.append((file, out, name))
     fixture.execute(systemctl + " restart nix-daemon.service\n")
-    require(fixture.guest_json(nix + "nix store info --store daemon --json", user=user)["trusted"] is False, "daemon restart trust")
+    require(fixture.guest_json(daemon_query(s), user=user)["trusted"] is False, "daemon restart trust")
     for _, out, _ in outputs:
         fixture.execute(f"{nix}nix-store --verify-path {out}\n", user=user)
     fixture.report["daemon_restart"] = True
@@ -241,7 +244,7 @@ def full_acceptance(fixture):
     fixture.command(["start", fixture.name], timeout=90)
     fixture.activation()
     fixture.report["configured_caches_after_restart"] = cache_configuration(
-        fixture.guest_json(nix + "nix config show --json", user=user))
+        fixture.guest_json(nix + "nix config show --json", user=user), engine=engine_kind(s))
     require(fixture.report["configured_caches_after_restart"] == fixture.report["configured_caches"],
             "cache configuration changed after restart")
     new_boot = fixture.execute(c + "cat /proc/sys/kernel/random/boot_id\n")[1].strip()

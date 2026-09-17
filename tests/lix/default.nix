@@ -130,6 +130,25 @@ let
 in
 {
   inherit assertions leaf;
+  # Metadata only; the explicit native fixture never realizes these paths.
+  smokeSpec = pkgs.writeText "lix-msb-smoke-spec.json" (
+    builtins.unsafeDiscardStringContext (
+      builtins.toJSON {
+        version = 2;
+        engineKind = "lix";
+        archive = base.outPath;
+        toplevel = base.guestToplevel.outPath;
+        engine = engine.outPath;
+        bash = pkgs.bash.outPath;
+        coreutils = pkgs.coreutils.outPath;
+        systemd = cfg.systemd.package.outPath;
+        glibc = pkgs.glibc.bin.outPath;
+        utilLinux = pkgs.util-linux.outPath;
+        registration = base.guestRegistration.closure.outPath;
+        roots = map toString base.guestRegistration.roots;
+      }
+    )
+  );
   # Evaluation only: no client, system, image or VM realization dependency.
   contract =
     assert lib.assertMsg (builtins.all (value: value) (builtins.attrValues assertions)) (
