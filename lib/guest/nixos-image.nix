@@ -101,7 +101,9 @@ in
       };
       toplevel = system.config.system.build.toplevel;
       rootfs = pkgs.runCommand "nixos-guest-rootfs" { } ''
-        mkdir -p "$out"/{etc/ssl/certs,nix/var/nix,nix/var/determinate,root,tmp,run}
+        mkdir -p "$out"/{etc/ssl/certs,nix/var/nix${
+          pkgs.lib.optionalString (system.config.determinate.enable or false) ",nix/var/determinate"
+        },root,tmp,run}
         chmod 1777 "$out/tmp"
         ln -s ${toplevel}/init "$out/init"
         # Agentd appends runtime-delivered CA certificates before activation.

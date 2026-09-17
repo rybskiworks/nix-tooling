@@ -74,6 +74,17 @@ in
           NIX_SSL_CERT_FILE = bundle;
         };
       };
+      # Lix also supplies a socket-activated per-connection daemon template.
+      # Both forms must see registered store paths and the runtime CA bundle.
+      "nix-daemon@" = lib.mkIf ((config.nix.package.pname or "") == "lix") (
+        requiresRegistration
+        // {
+          environment = {
+            CURL_CA_BUNDLE = lib.mkForce bundle;
+            NIX_SSL_CERT_FILE = bundle;
+          };
+        }
+      );
       guest-store-registration = {
         description = "Register and root all immutable guest image payloads";
         requiredBy = [ "sysinit.target" ];

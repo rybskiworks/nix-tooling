@@ -39,6 +39,7 @@ initialize a tracker, install a host daemon, migrate credentials or start worklo
 | `devenvModules.toml` | Pinned Tombi and shared TOML policy. |
 | `devenvModules.rust` | Supplier-owned Fenix compiler and Rust formatting. |
 | `devenvModules.beads` | Pinned CLI, without tracker initialization or synchronization. |
+| `devenvModules.lix` | Shared stable Lix client, without replacing the host daemon. |
 | `devenvModules.determinate` | Opt-in Nix client, without replacing the host daemon. |
 | `lib.guest` / `nixosModules` | Explicit guest construction and optional NixOS profiles. |
 
@@ -138,6 +139,7 @@ contracts. Optional packages do not implicitly become ordinary CI gates.
 | Guide | Boundary |
 | :--- | :--- |
 | [Guest images](docs/guest-images.md) | Runtime-neutral construction primitives. |
+| [Lix guests](docs/lix-guests.md) | Canonical shared Lix parent, module and explicit adoption gates. |
 | [Determinate guests](docs/determinate-guests.md) | Explicit client/Nixd profile and optional VM tests. |
 | [NixOS OCI images](docs/nixos-oci-images.md) | Base/leaf assembly, registration and activation limits. |
 | [Beads SQL service](docs/beads-server.md) | External server configuration and native compatibility evidence. |
