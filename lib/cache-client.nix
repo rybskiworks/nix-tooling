@@ -55,9 +55,8 @@ assert lib.assertMsg (unexpected == [ ]) (
   + lib.concatStringsSep ", " unexpected
 );
 assert lib.assertMsg (builtins.isString endpoint) "cache endpoint must be a string";
-assert lib.assertMsg (
-  builtins.isBool insecureLocalEndpoint
-) "insecureLocalEndpoint must be a boolean";
+assert lib.assertMsg (builtins.isBool insecureLocalEndpoint)
+  "insecureLocalEndpoint must be a boolean";
 assert lib.assertMsg (endpoint != "") "cache endpoint must not be empty";
 assert lib.assertMsg (
   builtins.match "[^ \t\n\r]+" endpoint != null
@@ -78,9 +77,7 @@ assert lib.assertMsg (
 assert lib.assertMsg (
   hostForm && (afterHost == "" || builtins.match ":[0-9]+" afterHost != null)
 ) "cache endpoint must name a host with an optional numeric port";
-assert lib.assertMsg (
-  secured || scheme == "http"
-) "cache endpoint must use the https:// scheme";
+assert lib.assertMsg (secured || scheme == "http") "cache endpoint must use the https:// scheme";
 assert lib.assertMsg (
   secured || insecureLocalEndpoint
 ) "cache endpoint requires https:// unless insecureLocalEndpoint explicitly allows plain http";
