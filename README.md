@@ -42,6 +42,7 @@ initialize a tracker, install a host daemon, migrate credentials or start worklo
 | `devenvModules.lix` | Shared stable Lix client, without replacing the host daemon. |
 | `devenvModules.determinate` | Opt-in Nix client, without replacing the host daemon. |
 | `lib.guest` / `nixosModules` | Explicit guest construction and optional NixOS profiles. |
+| `packages.x86_64-linux.git-attribution` / `nixosModules.gitAttribution` | Shared co-author formatting, validation and opt-in clone hooks; [usage and squash workflow](docs/git-attribution.md). |
 
 The exported system is **`x86_64-linux`**. Pinned binary packages currently
 constrain portability; adding a platform requires package and runtime evidence,

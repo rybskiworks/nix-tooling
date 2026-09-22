@@ -102,6 +102,7 @@
         lib.guest = import ./lib/guest { inherit (inputs) nixpkgs; };
         lib.cacheClient = ./lib/cache-client.nix;
         nixosModules = {
+          gitAttribution = ./nixosModules/git-attribution.nix;
           cacheClient = ./nixosModules/cache-client.nix;
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
@@ -123,6 +124,7 @@
             config.allowUnfree = true;
           };
           tombiPkg = pkgsWithFenix.callPackage ./packages/tombi.nix { };
+          gitAttributionPkg = pkgsWithFenix.callPackage ./packages/git-attribution.nix { };
           beadsPkg = inputs.beads.packages.${system}.bd;
           doltPkg = pkgsWithFenix.callPackage ./packages/dolt-bin.nix { };
           beadsServerChecks = import ./tests/beads-server {
@@ -237,6 +239,11 @@
           # flakeModule already creates `checks.pre-commit`; no extra wiring needed.
           # Additional check: tombiCheck via filtered src (mirrors workestrate's lib.checks.tombiCheck)
           checks = {
+            git-attribution = import ./tests/git-attribution {
+              pkgs = pkgsWithFenix;
+              inherit (inputs) nixpkgs;
+              package = gitAttributionPkg;
+            };
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
             lix-contract = lixChecks.contract;
@@ -357,6 +364,7 @@
 
           # Packages
           packages = {
+            git-attribution = gitAttributionPkg;
             tombi = tombiPkg;
             beads = beadsPkg;
             dolt-bin = doltPkg;
