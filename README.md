@@ -1,161 +1,98 @@
 <h1 align="center">nix-tooling</h1>
-<p align="center"><strong>One reviewed toolchain. Many reproducible consumers.</strong></p>
-<p align="center">Shared Nix inputs, opt-in development modules, and explicit guest-building primitives.</p>
+<p align="center"><strong>Our tooling pins. Shared across our projects.</strong></p>
+<p align="center">A common foundation for development, builds and reusable guest images at rybskiworks.</p>
 <p align="center">
   <a href="https://github.com/rybskiworks/nix-tooling/actions/workflows/ci.yml"><img alt="CI on main" src="https://github.com/rybskiworks/nix-tooling/actions/workflows/ci.yml/badge.svg?branch=main"></a>
-  &nbsp; Linux x86_64 &nbsp; | &nbsp; Nix flakes &nbsp; | &nbsp; Immutable inputs
+  &nbsp; Internal tooling &nbsp; | &nbsp; x86_64-linux &nbsp; | &nbsp; Nix flakes
 </p>
 <p align="center">
-  <a href="#consume-a-reviewed-snapshot">Use it</a> &middot;
-  <a href="#choose-only-what-you-need">Modules</a> &middot;
-  <a href="#verification-without-shell-side-effects">Verification</a> &middot;
-  <a href="CONTRIBUTING.md">Contribute</a>
+  <a href="#why-this-repo-exists">Why</a> &middot;
+  <a href="#what-we-share">What we share</a> &middot;
+  <a href="README.agents.md">Consumer integration</a> &middot;
+  <a href="CONTRIBUTING.md">Working on nix-tooling</a>
 </p>
 
 ---
 
-**Stop maintaining the same compiler and formatter pins in every repository.**
-`nix-tooling` owns a shared package set and Fenix toolchain, then exposes small,
-opt-in modules for consumers such as Workestrate and its runtime forks.
+**This is the internal tooling and pinning repository for rybskiworks.** It is
+publicly visible, but designed around our own repositories, not as a general-purpose
+Nix framework. Workestrate, runtime forks, fleets and workload image flakes can
+consume a reviewed tooling revision instead of maintaining parallel toolchain pins
+and packaging recipes.
 
-It is a supplier, not an operator environment. Importing a module should not
-initialize a tracker, install a host daemon, migrate credentials or start workloads.
+## Why this repo exists
 
-```text
-                    nix-tooling @ reviewed commit
-                     /           |             \
-              input authority  dev modules   guest primitives
-                     \           |             /
-                       consumer flakes follow
-                    Workestrate / runtime / tools
+We want to **build the shared pieces once and reuse them wherever the inputs
+match**, rather than repeatedly download or compile slightly different copies.
+
+```mermaid
+flowchart TD
+    T["nix-tooling: reviewed pins + reusable outputs"]
+    T --> D["Developer shells and CI"]
+    T --> R["Workestrate and runtime forks"]
+    T --> F["Fleet and workload image flakes"]
 ```
 
-## Choose only what you need
+Shared inputs and package outputs help consumers converge on the same Nix store
+paths. Those paths can be reused from the local store or substituted from a trusted
+binary cache. Shared guest parents also let workload images inherit common layers
+instead of rebuilding their base independently.
 
-| Surface | Purpose |
+**Pinning enables reuse; it does not guarantee a cache hit.** Matching version
+strings are not enough: package definitions, source, system, dependencies and build
+options matter too. Cross-machine reuse also needs the matching outputs published
+to a reachable, trusted cache. This repository provides building blocks, not an
+automatically deployed cache or builder service.
+
+## What we share
+
+| Shared here | What it gives our projects |
 | :--- | :--- |
-| `devenvModules.base` | Common shell tools and formatting integration. |
-| `devenvModules.nix` | Nix formatting and static checks. |
-| `devenvModules.toml` | Pinned Tombi and shared TOML policy. |
-| `devenvModules.rust` | Supplier-owned Fenix compiler and Rust formatting. |
-| `devenvModules.beads` | Pinned CLI, without tracker initialization or synchronization. |
-| `devenvModules.lix` | Shared stable Lix client, without replacing the host daemon. |
-| `devenvModules.determinate` | Opt-in Nix client, without replacing the host daemon. |
-| `lib.guest` / `nixosModules` | Explicit guest construction and optional NixOS profiles. |
+| **Input revisions** | One authority for nixpkgs, Fenix/Rust, devenv, flake-parts, treefmt-nix and git-hooks. |
+| **Packaged tools** | Reusable outputs for Tombi, Beads, Lix, Determinate clients and Dolt variants. |
+| **Opt-in development modules** | Common shell tools, Nix/TOML/Rust formatting and checks, without a mandatory all-in-one environment. |
+| **Guest building blocks** | Image constructors, NixOS profiles and shared Lix/Determinate parent images for consumer-owned leaves. |
+| **Cache clients** | Explicit, additive cache endpoint/public-key configuration, including the pinned devenv cache. |
 
-The exported system is **`x86_64-linux`**. Pinned binary packages currently
-constrain portability; adding a platform requires package and runtime evidence,
-not just extending the flake's `systems` list.
+The exported platform is **`x86_64-linux`**. The authoritative output names are in
+[`flake.nix`](flake.nix); the [consumer guide](README.agents.md#choose-the-smallest-surface)
+maps them to integration tasks.
 
-## Consume a reviewed snapshot
+## What stays in the consuming repo
 
-This example uses an immutable, already-landed snapshot. Advance it deliberately,
-then regenerate and review the consumer lockfile:
+**nix-tooling owns shared tooling. Each consumer owns its application and policy.**
+That includes source and dependency locks, project-specific tests and schemas,
+workload composition, deployment choices, credentials and runtime state.
 
-```nix
-inputs = {
-  tooling.url = "github:rybskiworks/nix-tooling/1120aa22cddf4a9a3424f38aadbebadd8a963c4b";
-  nixpkgs.follows = "tooling/nixpkgs";
-  fenix.follows = "tooling/fenix";
-  flake-parts.follows = "tooling/flake-parts";
-  devenv.follows = "tooling/devenv";
-  treefmt-nix.follows = "tooling/treefmt-nix";
-  git-hooks.follows = "tooling/git-hooks";
-};
-```
+A tooling update should not silently become a host-daemon replacement, tracker
+migration or workload launch. Different repositories can advance their tooling
+pins at different times; alignment is deliberate, not an automatic rollout.
 
-**One direction only.** Do not also make `tooling.inputs.nixpkgs` follow the
-consumer's nixpkgs; that reverses ownership and can create a cycle. When a consumer
-imports another consumer, make that dependency's tooling follow the root tooling
-input. Do not independently override the supplier's Fenix revision.
+To adopt or update it: select a reviewed revision, consume its inputs/outputs,
+validate the affected consumer and review the pin plus lockfile change. The exact
+wiring, local overrides and caveats belong in [README.agents.md](README.agents.md),
+which is useful to both developers and coding agents integrating another repo.
 
-For a flake-parts/devenv consumer, import only required modules and supply the
-pinned Fenix overlay to the package set:
+## Find the right guide
 
-```nix
-_module.args.pkgs = import inputs.nixpkgs {
-  inherit system;
-  overlays = [ inputs.fenix.overlays.default ];
-};
-devenv.shells.default.imports = [
-  inputs.tooling.devenvModules.base
-  inputs.tooling.devenvModules.nix
-  inputs.tooling.devenvModules.toml
-  inputs.tooling.devenvModules.rust
-];
-```
-
-Rust builders and standalone formatters must use the same Fenix compiler/rustfmt.
-The [Rust module](devenvModules/rust.nix) requires the expected overlay; Rust commit
-hooks remain opt-in. A sibling checkout is useful with an explicit local input
-override, but must not become a machine-local path or mutable ref in a published
-consumer lockfile.
-
-## Verification without shell side effects
-
-Run offline contracts first:
-
-```sh
-python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
-python3 scripts/ci/toolchain.py check --role supplier
-python3 scripts/ci/check_repository.py
-```
-
-With Nix available, evaluate or build **ordinary checks only**:
-
-```sh
-python3 scripts/ci/run_checks.py evaluate
-python3 scripts/ci/run_checks.py full
-```
-
-The runner enumerates `checks.x86_64-linux`, validates derivation outputs and builds
-that exact set. It does not evaluate the interactive shell, install hooks, rewrite
-the lockfile or run optional KVM tests. This avoids the documented development-root
-requirement that made the previous bare whole-flake CI invocation inconsistent
-with local development. It is not a claim that every output was validated.
-
-For an interactive shell, use the explicit-root wrapper:
-
-```sh
-./scripts/devenv-shell.sh
-```
-
-Whole-flake/development-shell validation is separate and requires an explicit root
-input. See [CI and releases](docs/ci-releases.md); never commit a temporary local
-root path in flake.lock.
-
-The base module disables git-hooks.nix's installation script by default, but the
-pinned devenv shell-entry task still installs its hook shim. Shell entry skips
-the lint and formatting tasks; it is not guaranteed to leave `.git/hooks` unchanged.
-Review hook installation separately from entering a shell, and do not commit
-generated store-path-bearing hook configuration. Formatter policy lives in
-`share/tombi-format.toml`; ordinary checks reject drift from the shared policy.
-
-## Guest and service building blocks
-
-Guest assembly, boot, daemon activation and protocol compatibility are separate
-contracts. Optional packages do not implicitly become ordinary CI gates.
-
-| Guide | Boundary |
+| Task | Start here |
 | :--- | :--- |
-| [Guest images](docs/guest-images.md) | Runtime-neutral construction primitives. |
-| [Lix guests](docs/lix-guests.md) | Canonical shared Lix parent, module and explicit adoption gates. |
-| [Determinate guests](docs/determinate-guests.md) | Explicit client/Nixd profile and optional VM tests. |
-| [NixOS OCI images](docs/nixos-oci-images.md) | Base/leaf assembly, registration and activation limits. |
-| [Beads SQL service](docs/beads-server.md) | External server configuration and native compatibility evidence. |
+| Wire a project into the shared pins and outputs | [Consumer integration](README.agents.md) |
+| Build a guest or extend a shared parent | [Guest primitives](docs/guest-images.md), [NixOS images and layers](docs/nixos-oci-images.md) |
+| Select a guest engine | [Lix guests](docs/lix-guests.md), [Determinate guests](docs/determinate-guests.md) |
+| Configure cache substitution | [Signed cache clients](docs/cache-clients.md) |
+| Use the Beads SQL service | [Service configuration and compatibility](docs/beads-server.md) |
+| Edit, test or promote nix-tooling | [Contributing](CONTRIBUTING.md), [CI and downstream promotion](docs/ci-releases.md) |
 
-Installing Beads is not tracker migration. Before changing an existing tracker,
-stop writers, back up its complete state and rehearse on a disposable copy. Do not
-initialize or synchronize databases from shell-entry hooks.
+For interactive work **on this repository**, run `./scripts/devenv-shell.sh`.
+It supplies the development root required by the pinned devenv integration.
+Verification commands and their limits are in the CI guide, not implied by shell
+entry or the badge above.
 
-## Maintenance
+Shared-store generations and the per-fleet cache/builder plane are tracked in
+[#15](https://github.com/rybskiworks/nix-tooling/issues/15) and
+[#19](https://github.com/rybskiworks/nix-tooling/issues/19). Those proposals are not
+promises that the runtime integrations are available in a consumer's pinned revision.
 
-`main` is the integration branch. Input ownership stays here; consumer pins advance
-through reviewed PRs. [`version.txt`](version.txt) is source-version metadata, not
-proof that a release exists or all runtime tests passed.
-
-Read [contributing](CONTRIBUTING.md), [security reporting](SECURITY.md),
-[GitHub governance](docs/github-governance.md) and the
-[repository audit](docs/repository-audit-2026-09-11.md). The audit records the
-outstanding project-license decision rather than assuming a license on the owner's
-behalf.
+[Security](SECURITY.md) &middot; [Governance](docs/github-governance.md) &middot;
+[Repository audit and outstanding license decision](docs/repository-audit-2026-09-11.md)
