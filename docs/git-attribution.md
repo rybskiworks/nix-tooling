@@ -26,7 +26,10 @@ Git's primary author, committer, authentication account, co-author trailers and
 signature are separate. Authenticating with a machine account does not set the
 Git author. A person already named as author does not become a second contributor
 when the same email appears in a trailer. This package never changes author,
-committer, credentials or signing configuration, and never invents agent credits.
+committer, credentials or signing configuration. Configure only reviewed human
+collaborators; never add agent/model co-authors, generation claims or orchestration
+metadata to repository artifacts. No identity is inferred to be human from a
+name or email pattern.
 
 ## Package and configuration
 
@@ -39,8 +42,10 @@ Configure the actual collaborators in Git config, independently of the agent:
 
 ```ini
 [attribution]
+    strict = true
     coAuthor = Pat Example <pat@example.org>
     coAuthor = Sam Example <sam@example.org>
+    allowedCoAuthor = Alex Example <alex@example.org>
 ```
 
 Put this in the appropriate operator-managed global configuration or a shared
@@ -51,6 +56,24 @@ global collaborators. Use conditional includes or separate workload profiles
 when repositories need different collaborators. No identity is inferred from a
 directory name or authenticated account.
 
+`attribution.coAuthor` declares the required human credits.
+`attribution.allowedCoAuthor` admits additional reviewed humans without adding
+them to every message. With `attribution.strict = true`, every existing footer,
+imported commit trailer and explicitly requested co-author must match one of
+those configured identities. Display names match exactly after trimming their
+outer whitespace; email matching ignores case. An unapproved name paired with an
+approved email is rejected, including duplicates that formatting would otherwise
+remove. Rejection occurs before the helper writes the message; it never silently
+drops a credit. Review unknown collaborators and their approved public identity
+before changing trusted configuration. Do not disable admission to pass a check.
+
+The standalone CLI leaves strict admission opt-in for callers using it only as a
+generic formatter. This workload policy and the NixOS module enable it. Git
+configuration must come from the trusted operator; this is workflow validation,
+not a security boundary against callers who can replace their Git configuration.
+Only final co-author trailers are admitted by this check. Review the rest of the
+commit or PR artifact for meaningful repository content and prohibited metadata.
+
 For NixOS guests, one opt-in module supplies the package, `/etc/gitconfig` entries
 and a clone/init template:
 
@@ -60,6 +83,7 @@ and a clone/init template:
   programs.gitAttribution = {
     enable = true;
     coAuthors = [ "Pat Example <pat@example.org>" ];
+    allowedCoAuthors = [ "Sam Example <sam@example.org>" ];
   };
 }
 ```
@@ -70,6 +94,10 @@ same Git configuration, and select the package's
 `share/git-attribution/template` as `init.templateDir`. Image layers that retain
 a prebuilt base can use that package/configuration path without reevaluating or
 replacing the base system.
+
+The module defaults `strict = true`; `allowedCoAuthors` defaults to an empty
+list. Required `coAuthors` are always admitted as well. These are public identity
+lists, not credentials or guesses derived from an authentication account.
 
 `installTemplate = false` leaves template ownership with the consumer. Compose
 the package's two hook entrypoints into the existing template in that case.
@@ -135,9 +163,10 @@ gh pr create --base main --title 'feat: explain the change' --body-file /tmp/pr-
 ```
 
 Explicit `--co-author 'Name <email>'` arguments can be repeated; when supplied,
-they replace the configured required list for that invocation. Formatting
-preserves existing co-authors and unrelated trailers, and deduplicates identities
-by email. A trailer mentioned in prose is not a substitute for the final block.
+they replace the configured required list for that invocation, but never expand
+the trusted admission list. Formatting preserves approved existing co-authors
+and unrelated trailers, and deduplicates identities by email. A trailer mentioned
+in prose is not a substitute for the final block.
 
 GitHub squash merges create a new commit on the server, where local hooks do not
 run. Configure repository defaults to `squash_merge_commit_title = PR_TITLE` and
@@ -145,8 +174,8 @@ run. Configure repository defaults to `squash_merge_commit_title = PR_TITLE` and
 are editable defaults, not enforcement, and this package does not change them.
 
 The host merge workflow should prepare the exact body it will submit. Starting
-with the reviewed PR description, preserve existing co-author trailers from the
-reviewed commit range as well:
+with the reviewed PR description, preserve approved human co-author trailers
+from the reviewed commit range as well:
 
 ```sh
 git-attribution format --file /tmp/squash-body.md --from-commits BASE_SHA..HEAD_SHA

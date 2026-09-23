@@ -10,8 +10,9 @@ explains the purpose and ownership split.
 
 `nix-tooling` owns shared tooling revisions. Consumers select a reviewed supplier
 commit and commit their own Nix-generated `flake.lock`. The example below is a
-concrete landed snapshot with the surfaces described here, **not an instruction to
-upgrade an existing consumer**. Only declare inputs the consumer actually uses.
+concrete landed snapshot for shared input wiring, **not an instruction to upgrade
+an existing consumer**. Check that the selected revision exports each required
+output, and only declare inputs the consumer actually uses.
 
 ```nix
 inputs = {
@@ -57,6 +58,7 @@ The exported system is `x86_64-linux`.
 | A shared parent image | `tooling.packages.${system}.{guest-lix-base,guest-determinate-base}`. Reuse the selected parent when composing leaves. |
 | Guest profiles | `tooling.nixosModules.{guestBase,microsandboxGuest,lixGuest,determinateGuest,devenvCache}`. See the engine/image guides before activation. |
 | A signed-cache reader | `tooling.nixosModules.cacheClient`, or `import tooling.lib.cacheClient { ... }` for a settings fragment. |
+| Human co-author attribution | `tooling.packages.${system}.git-attribution` and `tooling.nixosModules.gitAttribution`; [strict identity admission, hooks and squash workflow](docs/git-attribution.md). |
 
 Here `tooling` means `inputs.tooling`; brace groups in the table abbreviate separate
 attributes, not Nix expressions. Prefer exported packages/helpers over copying

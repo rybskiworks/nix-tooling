@@ -67,14 +67,42 @@ def unique(identities):
     return result
 
 
-def configured_authors(explicit):
-    if explicit:
-        values = explicit
-    else:
-        values = git("config", "--null", "--get-all", "attribution.coAuthor", missing_ok=True).stdout.split("\0")
-        values = values[:-1] if values[-1] == "" else values
+def configured_values(key):
+    values = git("config", "--null", "--get-all", key, missing_ok=True).stdout.split("\0")
+    return values[:-1] if values[-1] == "" else values
+
+
+def configured_authors(explicit, approved):
+    values = explicit or configured_values("attribution.coAuthor")
+    admit_authors(values, approved)
     # Validate every entry before deduplication; malformed duplicates must not disappear.
     return unique(values)
+
+
+def identity_key(value):
+    normalized, email = identity(value)
+    return normalized.rsplit(" <", 1)[0], email
+
+
+def approved_authors():
+    strict = git("config", "--type=bool", "--get", "attribution.strict", missing_ok=True).stdout.strip()
+    if strict != "true":
+        return None
+    # Only configured identities grant admission. CLI arguments and imported
+    # trailers request credits but cannot expand the trusted human policy.
+    values = [*configured_values("attribution.coAuthor"),
+              *configured_values("attribution.allowedCoAuthor")]
+    return {identity_key(value) for value in values}
+
+
+def admit_authors(values, approved):
+    if approved is not None:
+        for value in values:
+            if identity_key(value) not in approved:
+                raise AttributionError(
+                    "unapproved co-author identity; review the human identities in "
+                    "attribution.coAuthor and attribution.allowedCoAuthor"
+                )
 
 
 def footer_start(message):
@@ -107,9 +135,10 @@ def footer_start(message):
 class TrailerParser:
     """Use Git's trailer grammar with deterministic, command-free configuration."""
 
-    def __init__(self, directory, comment="\x1f"):
+    def __init__(self, directory, comment="\x1f", approved=None):
         self.directory = directory
         self.comment = comment
+        self.approved = approved
         self.env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
         self.env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_SYSTEM=os.devnull,
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_CEILING_DIRECTORIES=str(Path(directory).parent))
@@ -153,9 +182,11 @@ class TrailerParser:
                     break
             else:
                 raise AttributionError("could not locate a parsed co-author trailer in the message")
+        admit_authors(values, self.approved)
         return values, spans
 
     def format(self, message, required):
+        admit_authors(required, self.approved)
         existing, _ = self.authors_and_spans(message)
         existing_emails = {identity(value)[1] for value in existing}
         args = ["--where", "end", "--if-exists", "addIfDifferent", "--if-missing", "add"]
@@ -180,6 +211,7 @@ class TrailerParser:
         return message
 
     def check(self, message, required):
+        admit_authors(required, self.approved)
         existing, _ = self.authors_and_spans(message)
         emails = [identity(value)[1] for value in existing]
         if len(set(emails)) != len(emails):
@@ -353,9 +385,10 @@ def main():
     content, discarded = split_scissors(message, comment) if truncates_scissors else (message, "")
     if strips_comments and editing and split_scissors(message, comment)[1]:
         raise AttributionError("an edited message contains scissors; configure commit.cleanup=scissors so hooks can identify the final message")
-    required = configured_authors(getattr(args, "co_author", []))
+    approved = approved_authors()
+    required = configured_authors(getattr(args, "co_author", []), approved)
     with tempfile.TemporaryDirectory(prefix="git-attribution-") as directory:
-        parser = TrailerParser(directory)
+        parser = TrailerParser(directory, approved=approved)
         revision_range = getattr(args, "from_commits", None)
         if revision_range:
             required = unique([*required, *commit_authors(parser, revision_range)])

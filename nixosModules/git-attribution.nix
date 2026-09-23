@@ -23,11 +23,32 @@ in
       default = [ ];
       example = [ "Pat Example <pat@example.org>" ];
       description = ''
-        Public, consenting co-author identities in Name <email> form. These
+        Public, consenting human co-author identities in Name <email> form. These
         values enter /etc/gitconfig and the Nix store. They are attribution,
         never credentials; author, committer and signing remain separate.
         Evaluation checks the basic shape; the CLI validates complete email
         syntax before changing a message.
+      '';
+    };
+    strict = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Reject existing, imported or explicitly requested co-authors unless
+        their name and email match coAuthors or allowedCoAuthors. Email matching
+        ignores case; display names must match exactly. Rejection never removes
+        credits or rewrites the input message.
+      '';
+    };
+    allowedCoAuthors = lib.mkOption {
+      type = lib.types.listOf identity;
+      default = [ ];
+      example = [ "Sam Example <sam@example.org>" ];
+      description = ''
+        Additional reviewed human identities permitted by strict admission.
+        These public names and emails enter Git configuration and the Nix store.
+        Unlike coAuthors, they are preserved when present but not required in
+        every message. Never configure tool, model or automation identities here.
       '';
     };
     installTemplate = lib.mkOption {
@@ -53,7 +74,13 @@ in
     programs.git = {
       enable = true;
       config = lib.mkMerge [
-        { attribution.coAuthor = cfg.coAuthors; }
+        {
+          attribution = {
+            coAuthor = cfg.coAuthors;
+            inherit (cfg) strict;
+            allowedCoAuthor = cfg.allowedCoAuthors;
+          };
+        }
         (lib.mkIf cfg.installTemplate {
           init.templateDir = "${cfg.package}/share/git-attribution/template";
         })

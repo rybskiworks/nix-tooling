@@ -111,6 +111,97 @@ class AttributionTests(unittest.TestCase):
         self.assertIn(OTHER, formatted)
         self.assertIn("Second <second@example.com>", formatted)
 
+    def test_strict_preserves_approved_humans_and_unrelated_trailers(self):
+        self.git("config", "attribution.strict", "true")
+        self.git("config", "attribution.allowedCoAuthor", OTHER)
+        formatted = self.format(
+            f"feat: example\n\nReviewed-by: Reviewer <reviewer@example.com>\n"
+            f"Co-authored-by: {OTHER}\nCo-authored-by: Pat Example <PAT@example.org>\n"
+        )
+        self.assertIn("Reviewed-by: Reviewer <reviewer@example.com>\n", formatted)
+        self.assertIn(f"Co-authored-by: {OTHER}\n", formatted)
+        self.assertIn("Co-authored-by: Pat Example <PAT@example.org>\n", formatted)
+        self.cli("check", "--file", str(self.message))
+        self.assertNotIn(OTHER, self.format("feat: another change\n"))
+
+    def test_strict_rejects_unapproved_footer_before_writes(self):
+        self.git("config", "attribution.strict", "true")
+        for value in (OTHER, "Unapproved Name <pat@example.org>"):
+            with self.subTest(identity=value):
+                original = f"feat: example\n\nCo-authored-by: {AUTHOR}\nCo-authored-by: {value}\n"
+                self.message.write_text(original)
+                for command in ("format", "check"):
+                    result = self.cli(command, "--file", str(self.message), success=False)
+                    self.assertIn("unapproved co-author identity", result.stderr)
+                    self.assertEqual(self.message.read_text(), original)
+
+    def test_strict_explicit_authors_cannot_expand_trusted_policy(self):
+        self.git("config", "attribution.strict", "true")
+        original = f"feat: example\n\nCo-authored-by: {AUTHOR}\n"
+        for value in (OTHER, "Unapproved Name <PAT@example.org>"):
+            with self.subTest(identity=value):
+                self.message.write_text(original)
+                for command in ("format", "check"):
+                    result = self.cli(command, "--file", str(self.message),
+                                      "--co-author", AUTHOR, "--co-author", value, success=False)
+                    self.assertIn("unapproved co-author identity", result.stderr)
+                    self.assertEqual(self.message.read_text(), original)
+
+    def test_strict_explicit_authors_need_configured_approval(self):
+        self.git("config", "attribution.strict", "true")
+        self.git("config", "--unset-all", "attribution.coAuthor")
+        self.message.write_text("feat: example\n")
+        self.cli("format", "--file", str(self.message), "--co-author", AUTHOR, success=False)
+        self.assertEqual(self.message.read_text(), "feat: example\n")
+
+    def test_strict_range_rejects_unapproved_names_before_writes(self):
+        self.stage()
+        self.git("commit", "-m", "feat: base")
+        base = self.git("rev-parse", "HEAD").stdout.strip()
+        for value in (OTHER, "Unapproved Name <pat@example.org>"):
+            with self.subTest(identity=value):
+                self.stage(value)
+                self.git("commit", "-m", f"feat: imported\n\nCo-authored-by: {value}")
+                self.git("config", "attribution.strict", "true")
+                original = f"feat: squash\n\nCo-authored-by: {AUTHOR}\n"
+                self.message.write_text(original)
+                result = self.cli("format", "--file", str(self.message),
+                                  "--from-commits", f"{base}..HEAD", success=False)
+                self.assertIn("unapproved co-author identity", result.stderr)
+                self.assertEqual(self.message.read_text(), original)
+                base = self.git("rev-parse", "HEAD").stdout.strip()
+
+    def test_strict_allows_approved_imports_and_explicit_selection(self):
+        self.git("config", "attribution.strict", "true")
+        self.git("config", "attribution.allowedCoAuthor", OTHER)
+        self.stage()
+        self.git("commit", "-m", "feat: base")
+        self.stage("second")
+        self.git("commit", "-m", f"feat: imported\n\nCo-authored-by: {OTHER}")
+        formatted = self.format("feat: squash\n", "--from-commits", "HEAD~1..HEAD")
+        self.assertIn(OTHER, formatted)
+        self.assertIn(AUTHOR, formatted)
+        selected = self.format("feat: reviewed credit\n", "--co-author", OTHER)
+        self.assertIn(OTHER, selected)
+        self.assertNotIn(AUTHOR, selected)
+        self.cli("check", "--file", str(self.message), "--co-author", OTHER)
+
+    def test_strict_rejects_invalid_trusted_configuration_before_writes(self):
+        self.git("config", "attribution.strict", "true")
+        self.git("config", "attribution.allowedCoAuthor", "Invalid identity")
+        self.message.write_text("feat: example\n")
+        self.cli("format", "--file", str(self.message), success=False)
+        self.assertEqual(self.message.read_text(), "feat: example\n")
+
+    def test_strict_final_hook_rejects_editor_adding_unapproved_credit(self):
+        self.git("config", "attribution.strict", "true")
+        self.cli("install")
+        self.stage()
+        self.editor(f"p.write_text('feat: edited\\n\\nCo-authored-by: {AUTHOR}\\nCo-authored-by: {OTHER}\\n')")
+        result = self.git("commit", "-m", "feat: initial", "--edit", success=False)
+        self.assertIn("unapproved co-author identity", result.stderr)
+        self.git("rev-parse", "--verify", "HEAD", success=False)
+
     def test_repeated_config_and_no_identity_inference(self):
         self.git("config", "--add", "attribution.coAuthor", OTHER)
         formatted = self.format("feat: example\n")

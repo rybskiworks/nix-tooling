@@ -18,6 +18,7 @@ let
       programs.gitAttribution = {
         enable = true;
         coAuthors = [ "Pat Example <pat@example.org>" ];
+        allowedCoAuthors = [ "Sam Example <sam@example.org>" ];
       };
       programs.git.config = {
         user.name = "Existing author";
@@ -53,6 +54,7 @@ in
 assert !inert.programs.gitAttribution.enable;
 assert !(builtins.elem package inert.environment.systemPackages);
 assert configured.programs.git.enable;
+assert configured.programs.gitAttribution.strict;
 assert builtins.all (entry: entry.assertion) configured.assertions;
 assert !(builtins.all (entry: entry.assertion) missingAuthors.assertions);
 assert
@@ -76,6 +78,8 @@ pkgs.runCommand "git-attribution-check"
 
     # Read the emitted NixOS config with Git, then use its actual clone template.
     test "$(git config --file ${generatedConfig} --get-all attribution.coAuthor)" = 'Pat Example <pat@example.org>'
+    test "$(git config --file ${generatedConfig} --type=bool attribution.strict)" = true
+    test "$(git config --file ${generatedConfig} --get-all attribution.allowedCoAuthor)" = 'Sam Example <sam@example.org>'
     test "$(git config --file ${generatedConfig} user.name)" = 'Existing author'
     test "$(git config --file ${generatedConfig} commit.gpgsign)" = true
     test -z "$(git config --file ${generatedConfig} core.hooksPath || true)"
