@@ -22,6 +22,7 @@ python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
 python3 scripts/ci/contract.py metadata
 python3 scripts/ci/toolchain.py check --role supplier
 python3 scripts/ci/check_repository.py
+python3 tests/git-attribution/test_attribution.py
 python3 scripts/ci/run_checks.py evaluate
 python3 scripts/ci/run_checks.py full
 ```
@@ -30,6 +31,11 @@ The runner enumerates checks.x86_64-linux and evaluates derivation paths, then
 builds exactly that set for full. It rejects empty/malformed output, disables
 import-from-derivation, forbids lock updates and checks lockfile cleanliness.
 Subprocess argument arrays avoid executable shell interpolation from check names.
+
+The `git-attribution` ordinary check runs real Git fixtures against the Nix
+package and verifies its opt-in NixOS configuration and clone template. This
+tests local commit behavior; it does not configure GitHub merge settings or
+claim that running agents have adopted a new supplier revision.
 
 **This is not whole-flake validation.** It does not evaluate the interactive shell
 or optional package/VM outputs. Evaluation/fetching still have costs and are not

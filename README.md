@@ -53,6 +53,7 @@ automatically deployed cache or builder service.
 | **Opt-in development modules** | Common shell tools, Nix/TOML/Rust formatting and checks, without a mandatory all-in-one environment. |
 | **Guest building blocks** | Image constructors, NixOS profiles and shared Lix/Determinate parent images for consumer-owned leaves. |
 | **Cache clients** | Explicit, additive cache endpoint/public-key configuration, including the pinned devenv cache. |
+| **Human co-author attribution** | Shared trailer formatting, validation and opt-in clone hooks; [usage and squash workflow](docs/git-attribution.md). |
 
 The exported platform is **`x86_64-linux`**. The authoritative output names are in
 [`flake.nix`](flake.nix); the [consumer guide](README.agents.md#choose-the-smallest-surface)
