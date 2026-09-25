@@ -31,8 +31,11 @@ Public interfaces are:
 
 - `packages.x86_64-linux.lix`: the exact shared stable engine.
 - `packages.x86_64-linux.guest-lix-base`: its registered common image parent.
-- `nixosModules.lixGuest`: explicit engine/daemon policy for a separately composed
-  NixOS system. The caller still owns one shared parent and its stateVersion.
+- `nixosModules.lixSystem`: shared engine/daemon policy for hosts and guests,
+  without container, boot, network, firewall or maintenance settings.
+- `nixosModules.lixGuest`: imports `lixSystem` and adds disabled automatic GC/
+  optimisation plus default one-job/two-core limits. The caller still owns one
+  shared parent and its stateVersion.
 - `devenvModules.lix`: the executable client output only. It neither replaces a
   host daemon nor changes shell entry, accounts, or environment variables.
 
@@ -42,6 +45,18 @@ They are compatibility interfaces, **not aliases for Lix**. Existing consumer
 pins and the tooling development shell are unchanged. Consumer adoption requires
 a deliberate pin/export change and fresh image acceptance; do not switch the
 engine against an existing writable store/database as an incidental module edit.
+
+The role-neutral module selects the exact Lix package from this flake's pinned
+nixpkgs, even when imported into a consumer with additional overlays. It does not
+globally replace `pkgs.nix`, install guest registration units on a host, or grant
+access to another system's store/database. Host and guest package identity alone
+does not establish shared physical storage.
+
+For a host, import `nixosModules.lixSystem` directly and supply hardware, user,
+network, maintenance and resource policy in the host's own modules. The ordinary
+`lix-system-contract` checks this separation, exact host/guest engine identity and
+composition with the pinned [SOPS modules](sops.md). Runtime host qualification
+remains separate from this evaluation contract.
 
 ## Daemon, store, and isolation
 
