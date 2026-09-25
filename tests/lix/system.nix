@@ -22,11 +22,13 @@ let
           fsType = "tmpfs";
         };
         environment.defaultPackages = [ pkgs.hello ];
-        nix.gc.automatic = true;
-        nix.optimise.automatic = true;
-        nix.settings = {
-          max-jobs = 3;
-          cores = 4;
+        nix = {
+          gc.automatic = true;
+          optimise.automatic = true;
+          settings = {
+            max-jobs = 3;
+            cores = 4;
+          };
         };
       }
     ];
