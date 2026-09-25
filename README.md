@@ -82,6 +82,7 @@ which is useful to both developers and coding agents integrating another repo.
 | Build a guest or extend a shared parent | [Guest primitives](docs/guest-images.md), [NixOS images and layers](docs/nixos-oci-images.md) |
 | Select a guest engine | [Lix guests](docs/lix-guests.md), [Determinate guests](docs/determinate-guests.md) |
 | Reuse Lix and secret delivery on a host | [Shared Lix module](docs/lix-guests.md#package-and-module-ownership), [SOPS modules](docs/sops.md) |
+| Share immutable package closures with guests | [External closures](docs/external-closures.md) |
 | Configure cache substitution | [Signed cache clients](docs/cache-clients.md) |
 | Use the Beads SQL service | [Service configuration and compatibility](docs/beads-server.md) |
 | Edit, test or promote nix-tooling | [Contributing](CONTRIBUTING.md), [CI and downstream promotion](docs/ci-releases.md) |

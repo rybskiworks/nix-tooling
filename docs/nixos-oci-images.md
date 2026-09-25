@@ -44,10 +44,15 @@ Application configuration, credentials, mounts and service lifecycle still
 belong to the workload. Never place credentials in an image derivation.
 
 For an explicitly customized common base, `lib.guest.mkNixosImage` accepts
-`pkgs`, `name`, `stateVersion`, optional `tag`, `modules` and `maxLayers`.
+`pkgs`, `name`, `stateVersion`, optional `tag`, `modules`, `maxLayers` and
+`externalClosures`.
 It imports `nixosModules.microsandboxGuest`; callers must also choose an engine
 profile, normally `nixosModules.lixGuest`. Do not create independently
 customized bases for each leaf when one shared image is required.
+The opt-in [external closure interface](external-closures.md) retains complete
+registration while omitting selected immutable store objects from archive
+layers. It requires separately qualified read-only runtime bindings and retained
+host GC roots; ordinary images remain self-contained by default.
 
 ## Initialization and readiness
 

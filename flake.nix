@@ -277,6 +277,10 @@
             };
             beads-server-contract = beadsServerChecks.contract;
             nixos-image-contract = nixosImages.contract;
+            external-closure-image = import ./tests/nixos-image/external-closure.nix {
+              pkgs = pkgsWithFenix;
+              guest = guestLib;
+            };
 
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"

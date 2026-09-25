@@ -27,6 +27,32 @@ def config(layers):
 
 
 class LayerPipelineTests(unittest.TestCase):
+    def test_external_only_pipeline_removes_exact_admitted_roots(self):
+        paths = [root("regular"), root("directory")]
+        self.assertEqual(pipeline.make_pipeline([], 3, [paths]), [
+            ["remove_paths", sorted(paths)], ["popularity_contest"], ["limit_layers", 3],
+        ])
+
+    def test_external_and_parent_union_does_not_reintroduce_shared_dependencies(self):
+        result = pipeline.make_pipeline([config([[root("base"), root("lib")]])], 2,
+                                        [[root("lib"), root("external")]])
+        self.assertEqual(result[0][1], [root("base"), root("external"), root("lib")])
+
+    def test_external_inventory_decode_rejects_aliases_duplicates_and_trailing_data(self):
+        for data in (b"", b"\n", b"/tmp/path\n", (root("a") + "/bin\n").encode(),
+                     (root("a") + "\n" + root("a") + "\n").encode(),
+                     root("a").encode(), (root("a") + "\r\n").encode(), b"\xff\n"):
+            with self.subTest(data=data), self.assertRaises(ValueError):
+                pipeline.decode_inventory(data)
+
+    def test_external_inventory_shape_and_combined_budget(self):
+        for inventories in (None, {}, [None], [[]], [[root("a"), root("a")]], [["/tmp/a"]]):
+            with self.subTest(inventories=inventories), self.assertRaises(ValueError):
+                pipeline.make_pipeline([], 1, inventories)
+        from unittest.mock import patch
+        with patch.object(pipeline, "MAX_PATHS", 1), self.assertRaises(ValueError):
+            pipeline.make_pipeline([config([[root("base")]])], 1, [[root("external")]])
+
     def test_exact_supplier_pipeline_and_immutable_inputs(self):
         inputs = [config([[root("lib"), root("base")]])]
         original = copy.deepcopy(inputs)
