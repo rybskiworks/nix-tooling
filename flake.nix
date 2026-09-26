@@ -260,6 +260,11 @@
               package = gitAttributionPkg;
             };
             guest-contract = guestChecks.contract;
+            guest-evaluator-contract =
+              (import ./tests/guest/evaluator.nix {
+                pkgs = pkgsWithFenix;
+                inherit (inputs) nixpkgs;
+              }).contract;
             determinate-contract = determinateChecks.contract;
             lix-contract = lixChecks.contract;
             lix-system-contract = lixSystemChecks.contract;

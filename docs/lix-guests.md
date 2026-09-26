@@ -46,16 +46,26 @@ pins and the tooling development shell are unchanged. Consumer adoption requires
 a deliberate pin/export change and fresh image acceptance; do not switch the
 engine against an existing writable store/database as an incidental module edit.
 
-The role-neutral module selects the exact Lix package from this flake's pinned
-nixpkgs, even when imported into a consumer with additional overlays. It does not
-globally replace `pkgs.nix`, install guest registration units on a host, or grant
-access to another system's store/database. Host and guest package identity alone
-does not establish shared physical storage.
+The role-neutral module defaults to the caller's `pkgs.lixPackageSets.stable.lix`,
+including its overlays. A consumer can set `nix.package = selectedLix` to reuse
+an exact package output across hosts and guests. The module rejects non-Lix
+packages and packages whose declared platforms exclude the consumer's host.
+These metadata checks do not replace native daemon and image qualification of
+a newly selected version. The existing 2.94.2 daemon-template handling follows
+the selected package's version.
+
+The module does not globally replace `pkgs.nix`, install guest registration units
+on a host, or grant access to another system's store/database. Its nixpkgs
+registry still defaults to tooling's pinned source for compatibility; consumers
+owning that source should also set `nix.registry.nixpkgs.flake = inputs.nixpkgs`.
+Host and guest package identity alone does not establish shared physical storage.
 
 For a host, import `nixosModules.lixSystem` directly and supply hardware, user,
 network, maintenance and resource policy in the host's own modules. The ordinary
-`lix-system-contract` checks this separation, exact host/guest engine identity and
-composition with the pinned [SOPS modules](sops.md). Runtime host qualification
+`lix-system-contract` checks this separation, the default host/guest engine
+identity, caller package-set and explicit engine selection, rejection of non-Lix
+and incompatible-platform packages, and composition with the pinned
+[SOPS modules](sops.md). Runtime host qualification
 remains separate from this evaluation contract.
 
 ## Daemon, store, and isolation

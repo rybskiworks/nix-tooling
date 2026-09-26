@@ -120,12 +120,19 @@ in
       stateVersion,
       tag ? null,
       modules ? [ ],
+      nixpkgsSource ? null,
+      nixosSystem ? null,
       maxLayers ? 100,
       externalClosures ? [ ],
     }:
     let
       system = mkNixosSystem {
-        inherit pkgs stateVersion;
+        inherit
+          pkgs
+          stateVersion
+          nixpkgsSource
+          nixosSystem
+          ;
         modules = [ ../../nixosModules/microsandbox-guest.nix ] ++ modules;
       };
       toplevel = system.config.system.build.toplevel;
