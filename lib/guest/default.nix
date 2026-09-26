@@ -8,6 +8,7 @@ let
   isPkgs = pkgs: builtins.isAttrs pkgs && pkgs ? stdenv && pkgs ? dockerTools;
 in
 rec {
+  mkClosureExport = import ./closure-export.nix;
   inherit (import ./nixos-image.nix { inherit mkImage mkNixosSystem; }) mkNixosImage mkNixosLayer;
 
   # Keep dockerTools' archive, stream and layer semantics; no implicit guest tools.

@@ -47,6 +47,11 @@
     # Guest NixOS modules still receive the consumer's explicit nixpkgs.pkgs.
     determinate.url = "github:DeterminateSystems/determinate/cb76ac22754f6b36c008a3c39477c174a146dd6b";
 
+    sops-nix = {
+      url = "github:Mic92/sops-nix/2bd00bd9bb35fe6d114888c8f1c2e946c541dd8f";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Placeholder for pure evaluation: devenv's auto-imported readDevenvRoot
     # module sets devenv.root from builtins.readFile of this input when the
     # content is non-empty; /dev/null reads as "" (override inert, keeps
@@ -107,11 +112,14 @@
           guestBase = ./nixosModules/guest-base.nix;
           microsandboxGuest = ./nixosModules/microsandbox-guest.nix;
           devenvCache = import ./nixosModules/devenv-cache.nix inputs.devenv;
+          lixSystem = import ./nixosModules/lix-system.nix inputs.nixpkgs;
           lixGuest = import ./nixosModules/lix-guest.nix inputs.nixpkgs;
+          sops = inputs.sops-nix.nixosModules.sops;
           determinateGuest = import ./nixosModules/determinate-guest.nix {
             inherit (inputs) determinate nixpkgs;
           };
         };
+        homeManagerModules.sops = inputs.sops-nix.homeManagerModules.sops;
       };
 
       perSystem =
@@ -169,6 +177,13 @@
             inherit (inputs) nixpkgs;
             guest = guestLib;
             base = lixGuestBase;
+          };
+          lixSystemChecks = import ./tests/lix/system.nix {
+            pkgs = pkgsWithFenix;
+            inherit (inputs) nixpkgs;
+            sopsModule = inputs.sops-nix.nixosModules.sops;
+            sopsInstaller = inputs.sops-nix.packages.${system}.sops-install-secrets;
+            guestBase = lixGuestBase;
           };
           nixosImages = import ./tests/nixos-image {
             pkgs = pkgsWithFenix;
@@ -247,6 +262,7 @@
             guest-contract = guestChecks.contract;
             determinate-contract = determinateChecks.contract;
             lix-contract = lixChecks.contract;
+            lix-system-contract = lixSystemChecks.contract;
             determinate-client = import ./tests/determinate/client.nix {
               pkgs = pkgsWithFenix;
               inherit (inputs) determinate;
@@ -261,6 +277,10 @@
             };
             beads-server-contract = beadsServerChecks.contract;
             nixos-image-contract = nixosImages.contract;
+            external-closure-image = import ./tests/nixos-image/external-closure.nix {
+              pkgs = pkgsWithFenix;
+              guest = guestLib;
+            };
 
             beads-version =
               pkgsWithFenix.runCommand "beads-version-check"
@@ -375,6 +395,8 @@
             determinate-nixd = inputs.determinate.packages.${system}.default;
             guest-determinate-base = commonGuestBase;
             lix = pkgsWithFenix.lixPackageSets.stable.lix;
+            inherit (pkgsWithFenix) sops age;
+            sops-install-secrets = inputs.sops-nix.packages.${system}.sops-install-secrets;
             guest-lix-base = lixGuestBase;
           };
 

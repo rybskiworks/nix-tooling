@@ -15,6 +15,7 @@ let
       finalCommands ? "",
       parentStoreLayerConfigs ? [ ],
       parentLayerBudget ? 0,
+      externalClosures ? [ ],
     }:
     let
       # Materialize caller customizations before computing their runtime closure.
@@ -52,7 +53,15 @@ let
           cat > nix/guest-registrations/${registrationName}.roots <<'ROOTS'
           ${rootsText}ROOTS
           chmod 0444 nix/guest-registrations/${registrationName}.{registration,roots}
-          ${finalCommands}
+          ${
+            pkgs.lib.optionalString (externalClosures != [ ]) ''
+              mkdir -p nix/guest-external-closures
+              ${pkgs.lib.concatImapStringsSep "\n" (index: export: ''
+                cp ${export}/manifest.json nix/guest-external-closures/${toString index}.json
+                chmod 0444 nix/guest-external-closures/${toString index}.json
+              '') externalClosures}
+            ''
+          }${finalCommands}
         '';
       };
       # Read the supplier's emitted store-path inventory at build time, never
@@ -60,15 +69,33 @@ let
       layerPipeline = pkgs.runCommand "${registrationName}-guest-layer-pipeline.json" { } ''
         ${pkgs.buildPackages.python3}/bin/python3 -B ${./layer-pipeline.py} \
           ${toString (maxLayers - parentLayerBudget - 1)} \
-          ${pkgs.lib.escapeShellArgs (map toString parentStoreLayerConfigs)} > "$out"
+          ${pkgs.lib.escapeShellArgs (map toString parentStoreLayerConfigs)} \
+          ${
+            pkgs.lib.escapeShellArgs (
+              pkgs.lib.concatMap (export: [
+                "--external"
+                "${export}/store-paths"
+              ]) externalClosures
+            )
+          } > "$out"
       '';
       archive =
-        if parentStoreLayerConfigs == [ ] then
+        if parentStoreLayerConfigs == [ ] && externalClosures == [ ] then
           unfilteredArchive
         else
           unfilteredArchive.override { layeringPipeline = layerPipeline; };
     in
     assert builtins.match "[a-z][a-z0-9-]*" registrationName != null;
+    assert pkgs.lib.assertMsg (
+      builtins.isList externalClosures
+      && builtins.length externalClosures <= 128
+      && builtins.all (
+        export:
+        pkgs.lib.isDerivation export
+        && export ? guestClosureExport
+        && export.guestClosureExport.schemaVersion == 1
+      ) externalClosures
+    ) "guest: externalClosures must contain immutable closure exports";
     archive.overrideAttrs (old: {
       passthru = (old.passthru or { }) // {
         guestRegistration = {
@@ -81,6 +108,7 @@ let
             ;
         };
         guestStoreLayerConfigs = parentStoreLayerConfigs ++ [ archive.stream.conf ];
+        guestExternalClosures = externalClosures;
       };
     });
 in
@@ -93,6 +121,7 @@ in
       tag ? null,
       modules ? [ ],
       maxLayers ? 100,
+      externalClosures ? [ ],
     }:
     let
       system = mkNixosSystem {
@@ -118,6 +147,7 @@ in
           tag
           rootfs
           maxLayers
+          externalClosures
           ;
         registrationName = "base";
         contents = [ ];
@@ -189,6 +219,7 @@ in
         fromImage = base;
         parentStoreLayerConfigs = base.guestStoreLayerConfigs;
         parentLayerBudget = base.guestLayerBudget;
+        externalClosures = base.guestExternalClosures or [ ];
       };
     in
     assert
