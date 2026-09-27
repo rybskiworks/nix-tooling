@@ -45,8 +45,13 @@ belong to the workload. Never place credentials in an image derivation.
 
 For an explicitly customized common base, `lib.guest.mkNixosImage` accepts
 `pkgs`, `name`, `stateVersion`, optional `tag`, `modules`, `maxLayers` and
-`externalClosures`.
-It imports `nixosModules.microsandboxGuest`; callers must also choose an engine
+`externalClosures`. It also accepts the mutually exclusive `nixpkgsSource` and
+`nixosSystem` selectors described in [guest images](guest-images.md), forwarding
+them to system evaluation without replacing the caller's `pkgs`.
+
+This constructor is a **Microsandbox adapter**, not a runtime-neutral NixOS
+image builder: it imports `nixosModules.microsandboxGuest` and retains the init,
+network and CA contract below. Callers must also choose an engine
 profile, normally `nixosModules.lixGuest`. Do not create independently
 customized bases for each leaf when one shared image is required.
 The opt-in [external closure interface](external-closures.md) retains complete

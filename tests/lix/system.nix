@@ -37,11 +37,50 @@ let
   replacement = system.extendModules {
     modules = [ { nix.package = lib.mkForce pkgs.nix; } ];
   };
+  consumerEngine = pkgs.lixPackageSets.stable.lix.overrideAttrs (_old: {
+    name = "lix-consumer-package-set";
+  });
+  consumerPkgs = pkgs.extend (
+    _final: prev: {
+      lixPackageSets = prev.lixPackageSets // {
+        stable = prev.lixPackageSets.stable // {
+          lix = consumerEngine;
+        };
+      };
+    }
+  );
+  callerSystem = system.extendModules {
+    modules = [ { nixpkgs.pkgs = lib.mkForce consumerPkgs; } ];
+  };
+  selectedEngine = pkgs.lixPackageSets.stable.lix.overrideAttrs (_old: {
+    name = "lix-explicit-selection";
+  });
+  selectedSystem = system.extendModules {
+    modules = [ { nix.package = selectedEngine; } ];
+  };
+  unsupportedPlatform = system.extendModules {
+    modules = [
+      {
+        nix.package = pkgs.lixPackageSets.stable.lix.overrideAttrs (old: {
+          meta = old.meta // {
+            platforms = [ "aarch64-darwin" ];
+          };
+        });
+      }
+    ];
+  };
   assertions = {
     validSystem = builtins.all (entry: entry.assertion) cfg.assertions;
     hostAndGuestEngine = cfg.nix.package.drvPath == guestBase.guestSystem.config.nix.package.drvPath;
     sharedEngine = cfg.nix.package.drvPath == pkgs.lixPackageSets.stable.lix.drvPath;
     unsupportedEngineRejected = !(builtins.all (entry: entry.assertion) replacement.config.assertions);
+    callerPackageSetEngine = callerSystem.config.nix.package.drvPath == consumerEngine.drvPath;
+    callerEngineDistinct = consumerEngine.drvPath != cfg.nix.package.drvPath;
+    callerEngineAccepted = builtins.all (entry: entry.assertion) callerSystem.config.assertions;
+    selectedEngine = selectedSystem.config.nix.package.drvPath == selectedEngine.drvPath;
+    selectedEngineAccepted = builtins.all (entry: entry.assertion) selectedSystem.config.assertions;
+    unsupportedPlatformRejected =
+      !(builtins.all (entry: entry.assertion) unsupportedPlatform.config.assertions);
     hostKernelRetained = !cfg.boot.isContainer && cfg.boot.kernel.enable;
     hostNetworkRetained = cfg.networking.networkmanager.enable && cfg.networking.firewall.enable;
     hostNameRetained = cfg.networking.hostName == "lix-system-test";

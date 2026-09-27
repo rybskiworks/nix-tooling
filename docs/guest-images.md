@@ -62,6 +62,7 @@ does not choose a hostname, users, credentials, state version or init executable
 ```nix
 inputs.tooling.lib.guest.mkNixosSystem {
   inherit pkgs;
+  nixpkgsSource = inputs.nixpkgs;
   stateVersion = "26.05"; # Preserve the existing system's compatibility version.
   modules = [
     { networking.hostName = "example-guest"; }
@@ -69,11 +70,22 @@ inputs.tooling.lib.guest.mkNixosSystem {
 }
 ```
 
-This returns the ordinary `nixosSystem` result, not an image. The module evaluator
-comes from tooling's pinned nixpkgs; `nixpkgs.pkgs` uses the caller's exact package
-set, including overlays and configuration. Consumers should normally follow
-`tooling/nixpkgs`; do not independently reimport another package set inside the
-guest modules. Keep state-version changes deliberate.
+This returns the ordinary `nixosSystem` result, not an image. `nixpkgs.pkgs` uses
+the caller's exact package set, including overlays and configuration. Select the
+NixOS module source with `nixpkgsSource` (a flake, Nix path or absolute source
+path), or pass `nixosSystem = inputs.nixpkgs.lib.nixosSystem` for an explicit
+evaluator. These alternatives are mutually exclusive. Source paths must already
+be available; URLs are not fetched by the constructor. Evaluation sets
+`system = null`, so the injected package set selects the platform rather than
+the evaluating machine.
+
+Omitting both options preserves the existing evaluator from tooling's pinned
+nixpkgs. Consumers that own their NixOS revision should select it explicitly;
+they need not adopt tooling's package pin. Keep the module source and package
+set compatible, avoid reimporting another package set inside guest modules, and
+keep state-version changes deliberate. The constructor retains `guestBase`'s
+container defaults; it is not a physical-host module. The standalone
+`nixosModules.lixSystem` has no container or runtime defaults.
 
 Creating a toplevel or baking a profile symlink does **not** activate NixOS.
 Actual init handoff, `/etc` and users, daemon readiness, writable store state,
@@ -85,10 +97,13 @@ Determinate engine or Nixd selection is made by this library.
 
 The cheap contract is part of the ordinary tooling checks. It compares native
 dockerTools archive/stream identities, rejects invalid argument shapes, and
-verifies package-set injection and the absence of an implicit engine selection:
+verifies package-set injection and the absence of an implicit engine selection.
+`guest-evaluator-contract` additionally evaluates real NixOS configurations using
+explicit source and evaluator inputs while making the supplier fallback fail:
 
 ```sh
 nix build .#checks.x86_64-linux.guest-contract
+nix build .#checks.x86_64-linux.guest-evaluator-contract
 python3 -m unittest discover -s tests/guest -p 'test_*.py' -v
 ```
 

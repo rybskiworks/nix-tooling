@@ -6,7 +6,7 @@ nixpkgs:
   ...
 }:
 let
-  engine = nixpkgs.legacyPackages.${pkgs.stdenv.hostPlatform.system}.lixPackageSets.stable.lix;
+  engine = config.nix.package;
 in
 {
   assertions = [
@@ -15,8 +15,12 @@ in
       message = "The Lix system profile cannot be combined with Determinate Nixd.";
     }
     {
-      assertion = config.nix.package.drvPath == engine.drvPath;
-      message = "The Lix system profile requires the shared stable Lix package.";
+      assertion = (engine.pname or "") == "lix";
+      message = "The Lix system profile requires nix.package to be a Lix package.";
+    }
+    {
+      assertion = lib.meta.availableOn pkgs.stdenv.hostPlatform engine;
+      message = "The selected Lix package must support the consumer's host platform.";
     }
   ];
 
@@ -26,7 +30,7 @@ in
   # Hardware, networking, maintenance and resource limits belong to the role.
   nix = {
     enable = true;
-    package = engine;
+    package = lib.mkDefault pkgs.lixPackageSets.stable.lix;
     channel.enable = false;
     registry.nixpkgs.flake = lib.mkDefault nixpkgs;
     nixPath = lib.mkDefault [ ];

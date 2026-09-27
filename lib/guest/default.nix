@@ -6,6 +6,11 @@ let
     true;
   isContent = value: builtins.isPath value || nixpkgs.lib.isDerivation value;
   isPkgs = pkgs: builtins.isAttrs pkgs && pkgs ? stdenv && pkgs ? dockerTools;
+  isSource =
+    source:
+    builtins.isPath source
+    || (builtins.isString source && nixpkgs.lib.hasPrefix "/" source)
+    || (builtins.isAttrs source && source ? outPath && isSource source.outPath);
 in
 rec {
   mkClosureExport = import ./closure-export.nix;
@@ -58,14 +63,38 @@ rec {
       pkgs,
       stateVersion,
       modules ? [ ],
+      nixpkgsSource ? null,
+      nixosSystem ? null,
     }:
+    let
+      evaluate =
+        if nixosSystem != null then
+          nixosSystem
+        else if nixpkgsSource == null then
+          nixpkgs.lib.nixosSystem
+        else if builtins.isAttrs nixpkgsSource && nixpkgsSource ? lib.nixosSystem then
+          nixpkgsSource.lib.nixosSystem
+        else
+          import (toString nixpkgsSource + "/nixos/lib/eval-config.nix");
+    in
     assert require (isPkgs pkgs) "pkgs must be an explicit package set";
     assert require pkgs.stdenv.hostPlatform.isLinux "NixOS guests require a Linux package set";
     assert require (
       builtins.isString stateVersion && builtins.match "[0-9]{2}[.][0-9]{2}" stateVersion != null
     ) "stateVersion must be an explicit YY.MM string";
     assert require (builtins.isList modules) "modules must be a list";
-    nixpkgs.lib.nixosSystem {
+    assert require (
+      nixpkgsSource == null || isSource nixpkgsSource
+    ) "nixpkgsSource must be a source path or a flake with an outPath";
+    assert require (
+      nixosSystem == null || builtins.isFunction nixosSystem
+    ) "nixosSystem must be an evaluator function";
+    assert require (
+      nixpkgsSource == null || nixosSystem == null
+    ) "select either nixpkgsSource or nixosSystem, not both";
+    evaluate {
+      # eval-config.nix otherwise falls back to the evaluating machine's system.
+      system = null;
       modules = [
         ../../nixosModules/guest-base.nix
         {
