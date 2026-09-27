@@ -101,6 +101,14 @@ observe service flush and actual VMM poweroff, distinguishing the runtime's
 timed host fallback from successful guest shutdown; control EOF alone is not
 success. No mixed-libc shutdown compatibility is implied by this archive.
 
+Systemd skips its normal filesystem flushes in container mode. This userspace
+profile still owns a VM disk, so it installs a static `microsandbox-sync` shutdown
+hook. The hook flushes the guest after services and remaining processes stop;
+it does not depend on shared-store libraries still being mounted. This covers
+normal shutdown, including data written by service stop handlers. Forced VM
+termination and power loss still require their own recovery strategy. Additional
+system-shutdown hooks run in parallel and must durably flush their own writes.
+
 ## Complete additive registration
 
 Each base or leaf first materializes its complete `contents`, optional

@@ -26,6 +26,7 @@ let
   assertions = {
     kernelDisabled = !cfg.boot.kernel.enable;
     containerUserspace = cfg.boot.isContainer;
+    shutdownFlush = builtins.hasAttr "microsandbox-sync" cfg.systemd.shutdown;
     firmwarePidRangePreserved = cfg.boot.kernel.sysctl."kernel.pid_max" == null;
     noGeneratedPidRangeTuning =
       !(pkgs.lib.hasInfix "kernel.pid_max" cfg.environment.etc."sysctl.d/60-nixos.conf".text);
