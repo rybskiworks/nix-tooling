@@ -19,6 +19,10 @@ let
     requires = [ "guest-store-registration.service" ];
     after = [ "guest-store-registration.service" ];
   };
+  shutdownSync = pkgs.pkgsStatic.runCommandCC "microsandbox-shutdown-sync" { } ''
+    mkdir -p "$out/bin"
+    $CC -std=c99 -Os -static ${../lib/guest/sync-shutdown.c} -o "$out/bin/microsandbox-shutdown-sync"
+  '';
 in
 {
   assertions = [
@@ -67,6 +71,10 @@ in
   };
   systemd = {
     network.enable = false;
+    # Systemd omits its own sync in container mode. Use the final shutdown stage
+    # so service stop handlers finish writing first. The executable is static:
+    # shared-store bindings may already be unmounted when this hook runs.
+    shutdown.microsandbox-sync = "${shutdownSync}/bin/microsandbox-shutdown-sync";
     services = {
       nix-daemon = requiresRegistration // {
         environment = {
