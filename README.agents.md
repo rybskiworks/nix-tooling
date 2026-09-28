@@ -41,8 +41,11 @@ inputs.microsandbox-fork.inputs.tooling.follows = "tooling";
 
 This overrides that dependency's standalone tooling choice, so test the combined
 graph. Do not flatten every third-party input blindly: Determinate's package set
-here and `llm-agents` in the fleet deliberately retain upstream dependency graphs
-to preserve their prebuilt artifact identities.
+retains its upstream dependency graph to preserve its prebuilt artifact identity.
+The `llm-agents` input deliberately follows this repository's nixpkgs, and its
+Codex package is exported below. This can differ from a fleet's independently
+pinned `llm-agents` derivation even when the Codex version matches; validate the
+new output before replacing a fleet package.
 
 ## Choose the smallest surface
 
@@ -52,7 +55,7 @@ The exported system is `x86_64-linux`.
 
 | Need | Consume |
 | :--- | :--- |
-| A packaged tool | `tooling.packages.${system}.{tombi,beads,lix,determinate-nix,determinate-nixd,dolt-bin,dolt-secure-transport}`. Select a named output, not an assumed default. |
+| A packaged tool | `tooling.packages.${system}.{codex,tombi,beads,lix,determinate-nix,determinate-nixd,dolt-bin,dolt-secure-transport}`. Select a named output, not an assumed default. |
 | A development environment | `tooling.devenvModules.{base,nix,toml,rust,beads,lix,determinate}`. Import only what the project needs. |
 | Image assembly | `tooling.lib.guest.{mkImage,mkNixosSystem,mkNixosImage,mkNixosLayer}` with explicit consumer arguments. |
 | A shared parent image | `tooling.packages.${system}.{guest-lix-base,guest-determinate-base}`. Reuse the selected parent when composing leaves. |
@@ -63,6 +66,12 @@ The exported system is `x86_64-linux`.
 Here `tooling` means `inputs.tooling`; brace groups in the table abbreviate separate
 attributes, not Nix expressions. Prefer exported packages/helpers over copying
 packaging files or importing private implementation paths.
+
+For Codex, use `inputs.tooling.packages.${system}.codex`; consumers need no second
+`llm-agents` pin. A consumer using other supplier agent packages may declare
+`inputs.llm-agents.follows = "tooling/llm-agents"`. Installing the package does not
+enroll an account or copy `~/.codex`: credentials, project trust, hooks and other
+operator settings remain private consumer-owned state.
 
 For a flake-parts/devenv consumer, import `inputs.devenv.flakeModule` at the
 flake-parts level. This fragment belongs **inside its `perSystem` module**, where
