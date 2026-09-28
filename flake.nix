@@ -52,6 +52,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    llm-agents = {
+      url = "github:numtide/llm-agents.nix/6dfa856ce21ea57820962de08cdd2350a18c1598";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     # Placeholder for pure evaluation: devenv's auto-imported readDevenvRoot
     # module sets devenv.root from builtins.readFile of this input when the
     # content is non-empty; /dev/null reads as "" (override inert, keeps
@@ -135,6 +140,9 @@
           gitAttributionPkg = pkgsWithFenix.callPackage ./packages/git-attribution.nix { };
           beadsPkg = inputs.beads.packages.${system}.bd;
           doltPkg = pkgsWithFenix.callPackage ./packages/dolt-bin.nix { };
+          # Select lazily through the supplier's public shared-package overlay;
+          # enumerating all upstream packages can require unrelated newer tools.
+          codexPkg = (inputs.llm-agents.overlays.shared-nixpkgs pkgsWithFenix pkgsWithFenix).llm-agents.codex;
           beadsServerChecks = import ./tests/beads-server {
             pkgs = pkgsWithFenix;
             beads = beadsPkg;
@@ -384,6 +392,7 @@
 
           # Packages
           packages = {
+            codex = codexPkg;
             git-attribution = gitAttributionPkg;
             tombi = tombiPkg;
             beads = beadsPkg;

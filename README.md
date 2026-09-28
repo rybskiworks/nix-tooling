@@ -49,7 +49,7 @@ automatically deployed cache or builder service.
 | Shared here | What it gives our projects |
 | :--- | :--- |
 | **Input revisions** | One authority for nixpkgs, Fenix/Rust, devenv, flake-parts, treefmt-nix and git-hooks. |
-| **Packaged tools** | Reusable outputs for Tombi, Beads, Lix, Determinate clients and Dolt variants. |
+| **Packaged tools** | Reusable outputs for Codex, Tombi, Beads, Lix, Determinate clients and Dolt variants. |
 | **Opt-in development modules** | Common shell tools, Nix/TOML/Rust formatting and checks, without a mandatory all-in-one environment. |
 | **Guest building blocks** | Image constructors, NixOS profiles and shared Lix/Determinate parent images for consumer-owned leaves. |
 | **Cache clients** | Explicit, additive cache endpoint/public-key configuration, including the pinned devenv cache. |
